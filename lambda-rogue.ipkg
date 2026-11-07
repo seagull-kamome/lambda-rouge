@@ -1,0 +1,44 @@
+package lambda-rogue
+
+version    = 0.1.0
+authors    = "lambda-rogue contributors"
+license    = "BSD-3-Clause"
+brief      = "A modern terminal presentation of classic Rogue 5.4.4"
+sourcedir  = "src"
+opts       = "--total"
+depends    = contrib, rc2base, termui
+modules    = LambdaRogue.Core.Bitset,
+             LambdaRogue.Core.Geometry,
+             LambdaRogue.Core.Types,
+             LambdaRogue.Core.Fov,
+             LambdaRogue.Core.Monster,
+             LambdaRogue.Core.Item,
+             LambdaRogue.Core.Combat,
+             LambdaRogue.Core.Survival,
+             LambdaRogue.Core.Game,
+             LambdaRogue.Core.Dungeon,
+             LambdaRogue.Core.Rng,
+             LambdaRogue.Core.Replay,
+             LambdaRogue.UI.Animation,
+             LambdaRogue.UI.Theme,
+             LambdaRogue.UI.MapView,
+             LambdaRogue.UI.LogView,
+             LambdaRogue.App.Canvas,
+             LambdaRogue.App.Keymap,
+             LambdaRogue.App.Model,
+             LambdaRogue.App.Settings,
+             LambdaRogue.App.Mouse,
+             LambdaRogue.App.Update,
+             LambdaRogue.App.View,
+             LambdaRogue.App.Subs,
+             LambdaRogue.App.Program,
+             LambdaRogue.Persist.Paths,
+             LambdaRogue.Persist.Json,
+             LambdaRogue.Persist.Codec,
+             LambdaRogue.Persist.Score,
+             LambdaRogue.Persist.Replay,
+             LambdaRogue.Persist.Save,
+             LambdaRogue.Persist.Settings,
+             LambdaRogue.Version
+main       = Main
+executable = "lambda-rogue"
