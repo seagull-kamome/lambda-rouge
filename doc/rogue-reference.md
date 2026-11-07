@@ -1,6 +1,6 @@
 # Rogue 5.4.4 リファレンス
 
-- Status: Draft 1.0（M4 忠実性監査の確定版）
+- Status: Draft 1.1（M4 忠実性監査の確定版、BSD 3-Clause License）
 - Date: 2026-11-07
 - Target: Rogue 5.4.4 (Berkeley Rogue)
 - 目的: lambda-rogue の忠実性の基準を、再現可能な公開データと実装の対応で固定する。

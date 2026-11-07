@@ -3,7 +3,7 @@
 - Status: Draft 1.5（M4 スライス 12 まで完了。忠実性監査の確定値を反映）
 - Date: 2026-11-07
 - 対象: `LambdaRogue.Core.*` と `LambdaRogue.UI.*`、`LambdaRogue.Persist.*`
-- 前提: `doc/design.md` Draft 1.6
+- 前提: `doc/design.md` Draft 1.7
 
 ## 1. 境界
 
