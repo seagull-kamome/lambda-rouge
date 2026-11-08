@@ -19,6 +19,7 @@ import PlaybackTest
 import ReplayTest
 import SettingsTest
 import RngTest
+import StartupTest
 import SubsTest
 import ThemeTest
 import ViewTest
@@ -43,6 +44,7 @@ main = do
   SubsTest.run
   ViewTest.run
   ThemeTest.run
+  StartupTest.run
   PerfTest.run
   PlaybackTest.run
   putStrLn "all tests passed"

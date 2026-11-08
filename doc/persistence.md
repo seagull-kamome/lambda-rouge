@@ -1,9 +1,9 @@
 # lambda-rogue 永続化・リプレイ設計
 
-- Status: Draft 0.6（M4 スライス 11 のセーブ/オートセーブ永続化を反映）
-- Date: 2026-11-04
+- Status: Draft 0.7（シード生成と `--seed` を反映）
+- Date: 2026-11-08
 - 対象: `LambdaRogue.Persist.*`, `LambdaRogue.Core.Replay`
-- 前提: `doc/design.md` Draft 1.5, `doc/core-api.md` Draft 1.4
+- 前提: `doc/design.md` Draft 1.8, `doc/core-api.md` Draft 1.6
 
 ## 1. 方針
 
@@ -432,9 +432,12 @@ seedHex : Bits64 -> String
 - `hostname` と `bootId` は持たない。PID 再利用の厳密な判定はせず、
   生存している PID は安全側で「実行中」とみなす。
 - 読み込みの優先順位:
-  1. `save.json` があれば読み込んで削除する。
-  2. なければ `autosave.json` を読み込んで削除する。
-  3. どちらもなければ `newGame sampleSeed`。
+  1. `--seed` が指定されていれば、`save.json` / `autosave.json` を削除し、
+     その seed で新しいランを開始する。
+  2. `save.json` があれば読み込んで削除する。
+  3. なければ `autosave.json` を読み込んで削除する。
+  4. どちらもなければ、起動時刻（UTC ナノ秒）と PID から seed を生成して
+     `newGame` を開始する。
 - 復旧確認のダイアログはなく、起動時に自動で再開する。復旧したことは
   `SystemMsg` としてログの先頭に追加する。メッセージは `gameDigest` の
   対象外なので検証結果を変えない。

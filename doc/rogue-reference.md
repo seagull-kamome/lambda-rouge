@@ -1,7 +1,7 @@
 # Rogue 5.4.4 リファレンス
 
-- Status: Draft 1.1（M4 忠実性監査の確定版、BSD 3-Clause License）
-- Date: 2026-11-07
+- Status: Draft 1.2（M4 忠実性監査の確定版、BSD 3-Clause License、シード生成を追記）
+- Date: 2026-11-08
 - Target: Rogue 5.4.4 (Berkeley Rogue)
 - 目的: lambda-rogue の忠実性の基準を、再現可能な公開データと実装の対応で固定する。
 - 関連: `doc/design.md`, `doc/core-api.md`, `doc/m1-measurements.md`
@@ -565,6 +565,10 @@ HP は `レベル d8`（**導出**）。攻撃は `個数 d 面` の並び。
 - `roll n sides` は `n` 個の `1..sides` の和。
 - `chance percent` は 1d100 が `percent` 以下なら真。
 - 同じ seed と同じコマンド列は同じ状態遷移を生む。リプレイはこの性質を使う。
+- 新規ランの seed は起動時刻（UTC ナノ秒）と PID から生成する。
+  `--seed <16 桁小文字 hex>` を指定するとその seed で開始するため、
+  共有した seed を別の環境で再現できる。`sampleSeed` はテスト用の
+  固定フィクスチャであり、実行時の新規ランには使わない。
 - 生成・戦闘・モンスター AI・アイテム・罠の乱数消費順は実装で固定している。
   RNG の消費順を変えるとリプレイ互換性が壊れるため、変更時は注意する。
 

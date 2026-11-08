@@ -618,6 +618,7 @@ shareLayout m =
        , line body ("Seed: " ++ seedHex m.game.seed)
        , line dim "Give this seed to another player."
        , line dim "Same seed + same commands = same run."
+       , line dim ("Start with: lambda-rogue --seed " ++ seedHex m.game.seed)
        , line dim "------------"
        , line body ("Depth " ++ show m.game.depth
                      ++ "   Level " ++ show m.game.player.level

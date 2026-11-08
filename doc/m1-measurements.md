@@ -1,7 +1,7 @@
 # lambda-rogue 計測記録
 
-- Status: M1–M4 スライス 12 完了時点（忠実性監査後）
-- Date: 2026-11-07
+- Status: M1–M4 スライス 12 完了・シード修正時点
+- Date: 2026-11-08
 - 対象: `tests/PerfTest.idr`, `tests/latency_probe.py`
 - 関連: `doc/design.md` 9 章、`doc/core-api.md` 16〜29 章
 
@@ -879,3 +879,64 @@ seed で生成した階層・リプレイとは一致しない。これは意図
 - `verify.sh` はクリーンビルド、全テスト、PTY スモークの順に実行し、
   スモークは `$PWD/build/verify-data` に隔離される。ローカルの
   セーブ・戦績・設定・セッションロックには触れない。
+
+## 21. シード生成修正 追測（2026-11-08）
+
+新規ランが常に `sampleSeed` で始まっていた問題を修正した。通常起動では
+`System.Clock` の UTC ナノ秒と PID から 64-bit seed を生成し、
+`--seed <16 桁小文字 hex>` で共有 seed を再現できるようにした。
+`./verify.sh` を実行し、クリーンビルド、795 件のテスト、PTY スモークが
+すべて成功して `== verify: ok ==` で終了した。計測方法は §9〜§20 と同じ。
+
+### 21.1 結果
+
+| 項目 | 反復 | 合計 | 1 回あたり |
+|---|---:|---:|---:|
+| render (initial FOV, M1 fixture) | 1,000 | 3,955 ms | 3.96 ms/frame |
+| render (full map, M1 fixture) | 500 | 2,273 ms | 4.55 ms/frame |
+| render view (80x24) | 500 | 1,094 ms | 2.19 ms/frame |
+| render view (80x24, inventory) | 500 | 1,731 ms | 3.46 ms/frame |
+| render view (120x40) | 500 | 3,275 ms | 6.55 ms/frame |
+| render view (120x40, modern dark) | 500 | 3,314 ms | 6.63 ms/frame |
+| render view (120x40, inventory) | 200 | 1,435 ms | 7.18 ms/frame |
+| render view (80x24, help) | 200 | 862 ms | 4.31 ms/frame |
+| render view (80x24, palette) | 200 | 918 ms | 4.59 ms/frame |
+| render view (80x24, scores) | 200 | 707 ms | 3.54 ms/frame |
+| render view (80x24, share seed) | 200 | 756 ms | 3.78 ms/frame |
+| step (M1 fixture, 栄養 10,000) | 10,000 | 8,914 ms | 0.89 ms/turn |
+| step+render (initial FOV, M1 fixture) | 1,000 | 4,399 ms | 4.40 ms/frame |
+| step+render (full map, M1 fixture) | 500 | 3,604 ms | 7.21 ms/frame |
+| render (generated level 1) | 500 | 1,738 ms | 3.48 ms/frame |
+| step (generated, survivable) | 1,000 | 941 ms | 0.94 ms/turn |
+| step+render (generated) | 500 | 2,299 ms | 4.60 ms/frame |
+| generate level (depth 10) | 100 | 374 ms | 3.75 ms/level |
+
+生成 100 回後の RNG 状態は §20 と同じ
+`19a2b446df8069f25c343fb1c8b922f9`。シード生成は `newGame` の外側にあり、
+ダンジョン生成の乱数消費順序を変えていない。
+
+### 21.2 シードの再現確認
+
+PTY で実行し、画面出力の SHA-256 を比較した。
+
+| 起動 | 結果 |
+| --- | --- |
+| `--seed 0123456789abcdef` を 2 回 | 2 回の画面出力が完全に一致 |
+| `--seed 0123456789abcdef` と `--seed fedcba9876543210` | 画面出力が異なる |
+| seed 指定なしを 2 回 | 画面出力が異なる |
+| `--seed 0123456789ABCDEF` | 無効な seed として起動前にエラー |
+
+- 同じ seed と同じコマンド列では同じ画面になる。リプレイの前提を保っている。
+- seed 指定なしでは起動ごとにダンジョンが変わる。
+- `--seed` の解析は `App.Startup.parseStartSeed` に閉じ込め、
+  `tests/StartupTest.idr` で受理・拒否・欠落・未知引数を検証する。
+
+### 21.3 考察
+
+- 描画と `step` の値は §20 の 2.77 / 3.46 / 0.87 ms などと同じ範囲で、
+  シード生成の追加によるターン処理の変化はない。seed の生成は起動時に
+  1 回だけで、描画ループには入らない。
+- テストは 789 件から 795 件へ増えた。増分は `App.Startup` の
+  6 チェック（生成 seed、明示 seed、不正値、欠落、未知引数、混合）である。
+- `sampleSeed` は UI テストとベンチマークの固定フィクスチャとして残す。
+  実行時の新規ランには使わない。

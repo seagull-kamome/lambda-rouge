@@ -1,9 +1,9 @@
 # lambda-rogue Core API 設計
 
-- Status: Draft 1.5（M4 スライス 12 まで完了。忠実性監査の確定値を反映）
-- Date: 2026-11-07
+- Status: Draft 1.6（M4 スライス 12 完了。シード生成と `--seed` を反映）
+- Date: 2026-11-08
 - 対象: `LambdaRogue.Core.*` と `LambdaRogue.UI.*`、`LambdaRogue.Persist.*`
-- 前提: `doc/design.md` Draft 1.7
+- 前提: `doc/design.md` Draft 1.8
 
 ## 1. 境界
 
@@ -2153,6 +2153,13 @@ releaseSessionLock : IO ()
   `autosave.json` の順に再開する。読み込んだファイルは削除し、
   `"Resumed from save."` / `"Recovered from autosave."` を `SystemMsg`
   としてログ先頭に追加する。メッセージは `gameDigest` の対象外。
+- `Main` はコマンドラインの `--seed <16 桁小文字 hex>` を
+  `App.Startup.parseStartSeed` で解釈する。指定時はセーブを読まず、
+  `save.json` / `autosave.json` を削除して `newGame seed` を開始する。
+  未指定でセーブもない場合は、`System.Clock` の UTC ナノ秒と PID を
+  `combineSeed` で混ぜた 64-bit seed を生成する。
+- `App.Startup` は IO を持たない純粋な引数解析と seed 混合だけを担当し、
+  `tests/StartupTest.idr` で `--seed` の受理・拒否を検証する。
 - 正常終了時は `autosave.json` を削除し、最後に `releaseSessionLock` を呼ぶ。
 
 ### 28.6 テスト
@@ -2170,7 +2177,7 @@ releaseSessionLock : IO ()
   壊れたファイル、欠損ファイル。
 - セッションロックの取得、生存 PID の拒否、解放、死んだ PID と
   壊れたファイルの再利用。
-- `verify.sh` はクリーンビルド、789 件のテスト、PTY スモークを実行する。
+- `verify.sh` はクリーンビルド、795 件のテスト、PTY スモークを実行する。
 
 ### 28.7 既知の制約
 
