@@ -1,7 +1,7 @@
 # lambda-rogue 計測記録
 
-- Status: M1–M4 スライス 12 完了・シード修正時点
-- Date: 2026-11-08
+- Status: M1–M5 スライス 1 完了
+- Date: 2026-11-09
 - 対象: `tests/PerfTest.idr`, `tests/latency_probe.py`
 - 関連: `doc/design.md` 9 章、`doc/core-api.md` 16〜29 章
 
@@ -940,3 +940,54 @@ PTY で実行し、画面出力の SHA-256 を比較した。
   6 チェック（生成 seed、明示 seed、不正値、欠落、未知引数、混合）である。
 - `sampleSeed` は UI テストとベンチマークの固定フィクスチャとして残す。
   実行時の新規ランには使わない。
+
+## 22. M5 スライス 1 追測（2026-11-09）
+
+M5 スライス 1（探索、searching の指輪、healing / extra healing、
+magic missile 1d4）を入れた状態でテストスイートを実行した。
+計測方法は §9〜§21 と同じ。`Search` は 1 ターン消費するが、
+通常の移動・戦闘経路に追加の乱数消費はなく、searching の指輪を
+装着していない限り `step` の計算量は変わらない。
+
+### 22.1 結果
+
+| 項目 | 反復 | 合計 | 1 回あたり |
+|---|---:|---:|---:|
+| render (initial FOV, M1 fixture) | 1,000 | 2,880 ms | 2.88 ms/frame |
+| render (full map, M1 fixture) | 500 | 2,237 ms | 4.48 ms/frame |
+| render view (80x24) | 500 | 932 ms | 1.86 ms/frame |
+| render view (80x24, inventory) | 500 | 1,829 ms | 3.66 ms/frame |
+| render view (120x40) | 500 | 3,744 ms | 7.49 ms/frame |
+| render view (120x40, modern dark) | 500 | 3,147 ms | 6.29 ms/frame |
+| render view (120x40, inventory) | 200 | 1,297 ms | 6.49 ms/frame |
+| render view (80x24, help) | 200 | 887 ms | 4.44 ms/frame |
+| render view (80x24, palette) | 200 | 835 ms | 4.18 ms/frame |
+| render view (80x24, scores) | 200 | 602 ms | 3.01 ms/frame |
+| render view (80x24, share seed) | 200 | 805 ms | 4.03 ms/frame |
+| step (M1 fixture, 栄養 10,000) | 10,000 | 8,894 ms | 0.89 ms/turn |
+| step+render (initial FOV, M1 fixture) | 1,000 | 3,888 ms | 3.89 ms/frame |
+| step+render (full map, M1 fixture) | 500 | 2,942 ms | 5.89 ms/frame |
+| render (generated level 1) | 500 | 1,889 ms | 3.78 ms/frame |
+| step (generated, survivable) | 1,000 | 1,538 ms | 1.54 ms/turn |
+| step+render (generated) | 500 | 2,535 ms | 5.07 ms/frame |
+| generate level (depth 10) | 100 | 371 ms | 3.72 ms/level |
+
+生成 100 回後の RNG 状態は §20〜§21 と同じ
+`19a2b446df8069f25c343fb1c8b922f9`。探索と指輪は生成経路の乱数消費を
+変えないため、既存 seed のダンジョンはそのまま再現できる。
+
+### 22.2 考察
+
+- 描画と `step` の値は §20〜§21 の範囲内で、パレットが 24 項目から
+  25 項目に増えたことによる描画時間の悪化は見られない。
+- `step` は検索対象のトラップがある場合だけ乱数を消費する。指輪を
+  装着していない通常プレイでは、探索コマンドを明示的に使わない限り
+  乱数消費順は従来と同じである。
+- テストは 795 件から 814 件へ増えた。増分は `M5Test` の 15 チェックと、
+  既存テストの `s` キー、パレットの `Search for traps` / `Quit`、
+  ヘルプの search 表示の 4 チェックである。`PersistTest` は既存の
+  コマンド往復チェックに `Search` を加えたため、チェック数は変わらない。
+- `M3Test` の extra healing は固定の全回復を期待していたため、
+  「HP が増え、最大 HP を超えない」という新しい契約に更新した。
+- `./verify.sh` はクリーンビルド、814 件のテスト、PTY スモークを実行し、
+  `== verify: ok ==` で終了する。

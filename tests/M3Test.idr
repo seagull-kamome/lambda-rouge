@@ -132,8 +132,9 @@ potionTests = do
   let extra = potion 102 PotionExtraHealing
       gExtra = setPlayerStats (\p => { hp := 1 } p) (addToPack [extra] base)
       outExtra = step (Quaff 102) gExtra
-  check "extra healing restores more HP"
-    (outExtra.game.player.hp == outExtra.game.player.maxHp)
+  check "extra healing restores HP"
+    (outExtra.game.player.hp > gExtra.player.hp
+     && outExtra.game.player.hp <= outExtra.game.player.maxHp)
 
   let strength = potion 103 PotionStrength
       gStrength = addToPack [strength] base

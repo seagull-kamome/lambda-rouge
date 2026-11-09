@@ -174,6 +174,8 @@ run = do
     (any (\l => contains "F4" l) helpScreen)
   check "help mentions the mouse"
     (any (\l => contains "Mouse" l) helpScreen)
+  check "help lists the search command"
+    (any (\l => contains "search" l) helpScreen)
   check "help shows how to close it"
     (any (\l => contains "closes this help" l) helpScreen)
 

@@ -206,6 +206,7 @@ paletteEntries =
   , MkPaletteEntry "Reload settings" "" ReloadSettings Nothing
   , MkPaletteEntry "Save and quit" "" SaveAndQuit Nothing
   , MkPaletteEntry "Load game" "" LoadGame Nothing
+  , MkPaletteEntry "Search for traps" "s" (Do Search) (Just Search)
   , MkPaletteEntry "Quit" "Q" Quit' (Just Quit)
   ]
 

@@ -311,8 +311,8 @@ run = do
     (isScores (key mNormal (Press (KChar 'S') noMods)))
   check "Ctrl-S opens seed sharing"
     (isShare (key mNormal (Press (KChar 's') (MkMods False True False))))
-  check "the palette has 24 entries"
-    (paletteCount == 24)
+  check "the palette has 25 entries"
+    (paletteCount == 25)
   check "the palette includes Scores"
     (case paletteEntryAt 15 of
        Just e => e.label == "Scores"
@@ -352,6 +352,16 @@ run = do
     (case paletteEntryAt 22 of
        Just e => e.label == "Load game"
                   && (case e.action of LoadGame => True; _ => False)
+       Nothing => False)
+  check "the palette includes Search for traps"
+    (case paletteEntryAt 23 of
+       Just e => e.label == "Search for traps"
+                  && (case e.action of Do Search => True; _ => False)
+       Nothing => False)
+  check "the palette includes Quit"
+    (case paletteEntryAt 24 of
+       Just e => e.label == "Quit"
+                  && (case e.action of Quit' => True; _ => False)
        Nothing => False)
 
   let mScores : Model

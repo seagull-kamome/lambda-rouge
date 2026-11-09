@@ -74,6 +74,7 @@ data CommandId
   | MoveSouthWest
   | MoveSouthEast
   | Wait
+  | Search
   | PickUp
   | Descend
   | Ascend
@@ -109,6 +110,7 @@ Eq CommandId where
   MoveSouthWest == MoveSouthWest = True
   MoveSouthEast == MoveSouthEast = True
   Wait == Wait = True
+  Search == Search = True
   PickUp == PickUp = True
   Descend == Descend = True
   Ascend == Ascend = True
@@ -145,6 +147,7 @@ Show CommandId where
   show MoveSouthWest = "MoveSouthWest"
   show MoveSouthEast = "MoveSouthEast"
   show Wait = "Wait"
+  show Search = "Search"
   show PickUp = "PickUp"
   show Descend = "Descend"
   show Ascend = "Ascend"
@@ -181,6 +184,7 @@ commandName MoveNorthEast = "move-north-east"
 commandName MoveSouthWest = "move-south-west"
 commandName MoveSouthEast = "move-south-east"
 commandName Wait = "wait"
+commandName Search = "search"
 commandName PickUp = "pick-up"
 commandName Descend = "descend"
 commandName Ascend = "ascend"
@@ -216,6 +220,7 @@ commandFromName "move-north-east" = Just MoveNorthEast
 commandFromName "move-south-west" = Just MoveSouthWest
 commandFromName "move-south-east" = Just MoveSouthEast
 commandFromName "wait" = Just Wait
+commandFromName "search" = Just Search
 commandFromName "pick-up" = Just PickUp
 commandFromName "descend" = Just Descend
 commandFromName "ascend" = Just Ascend
@@ -279,6 +284,7 @@ defaultKeymap =
   , MkBinding MoveSouthWest "Move south-west" [ch 'b']
   , MkBinding MoveSouthEast "Move south-east" [ch 'n']
   , MkBinding Wait "Wait one turn" [ch '.', ch '5']
+  , MkBinding Search "Search for traps" [ch 's']
   , MkBinding PickUp "Pick up" [ch ',']
   , MkBinding Descend "Descend stairs" [ch '>']
   , MkBinding Ascend "Ascend stairs" [ch '<']

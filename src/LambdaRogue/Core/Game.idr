@@ -26,6 +26,7 @@ public export
 data Command
   = Move Dir
   | Wait
+  | Search
   | PickUp
   | Quaff ItemId
   | Read ItemId
@@ -44,6 +45,7 @@ public export
 Eq Command where
   Move a == Move b = a == b
   Wait == Wait = True
+  Search == Search = True
   PickUp == PickUp = True
   Quaff a == Quaff b = a == b
   Read a == Read b = a == b
@@ -63,6 +65,7 @@ public export
 Show Command where
   show (Move d) = "Move " ++ show d
   show Wait = "Wait"
+  show Search = "Search"
   show PickUp = "PickUp"
   show (Quaff i) = "Quaff " ++ show i
   show (Read i) = "Read " ++ show i
@@ -709,6 +712,66 @@ triggerTrap c st =
                          ({ game := g' } st))
          in applyTrap trap st1
 
+||| Searching is less reliable when blind or hallucinating, mirroring the
+||| original's increased denominator (`rnd(2 + probinc)`).
+searchPenalty : Player -> Bits64
+searchPenalty p =
+  let blind = if hasStatus Blinded p then 2 else 0
+      hallucinating = if hasStatus Hallucinating p then 3 else 0
+  in cast (blind + hallucinating)
+
+trapFoundMessage : TrapKind -> String
+trapFoundMessage TrapDoor = "You found a trapdoor."
+trapFoundMessage ArrowTrap = "You found an arrow trap."
+trapFoundMessage Sleep = "You found a sleeping gas trap."
+trapFoundMessage Bear = "You found a bear trap."
+trapFoundMessage Teleport = "You found a teleport trap."
+trapFoundMessage DartTrap = "You found a dart trap."
+trapFoundMessage Rust = "You found a rust trap."
+trapFoundMessage Mysterious = "You found a mysterious trap."
+
+revealTrapAt : Coord -> Game -> Game
+revealTrapAt c g =
+  let lvl = currentLevel g
+      lvl' : Level
+      lvl' = { traps := map (\t : Trap =>
+                               if t.pos == c
+                                  then { revealed := True } t
+                                  else t)
+                          lvl.traps } lvl
+  in updateCurrentLevel (const lvl') g
+
+||| Search the eight neighbouring cells.  Each unrevealed trap is found
+||| with probability 1/2 (1/4 when blind, lower still when hallucinating).
+||| The original's secret doors are not generated yet, so only traps are
+||| revealed here.
+searchTraps : Step -> (Step, Bool)
+searchTraps st0 =
+  let around = map (\d => add st0.game.player.pos (delta d)) directions
+      bound = the Bits64 2 + searchPenalty st0.game.player
+      visit : (Step, Bool) -> Trap -> (Step, Bool)
+      visit (st, found) t =
+        if t.revealed || not (elem t.pos around)
+           then (st, found)
+           else let (roll', rng') = uniform bound st.game.rng
+                    st1 : Step
+                    st1 = { game := { rng := rng' } st.game } st
+                in if roll' == 0
+                      then let g' = revealTrapAt t.pos st1.game
+                               text = if hasStatus Hallucinating st1.game.player
+                                         then "You found a trap."
+                                         else trapFoundMessage t.kind
+                           in (say SystemMsg text ({ game := g' } st1), True)
+                      else (st1, found)
+  in foldl visit (st0, False) (currentLevel st0.game).traps
+
+searchArea : Step -> Step
+searchArea st =
+  let (st', found) = searchTraps st
+  in consume (if found
+                 then st'
+                 else say SystemMsg "You search but find nothing." st')
+
 playerMove : Dir -> Step -> Step
 playerMove d st =
   let g0 = st.game
@@ -806,18 +869,33 @@ pickUp st =
 
 applyPotion : PotionKind -> Step -> Step
 applyPotion PotionHealing st =
-  let (n, rng') = roll 1 8 st.game.rng
-      p = st.game.player
+  let p = st.game.player
+      (n, rng') = roll p.level 4 st.game.rng
+      healed = p.hp + n
+      hp' : Int32
+      hp' = if healed > p.maxHp then p.maxHp + 1 else healed
+      maxHp' : Int32
+      maxHp' = if healed > p.maxHp then p.maxHp + 1 else p.maxHp
       p' : Player
-      p' = { hp := min p.maxHp (p.hp + n + 4) } p
+      p' = { hp := hp', maxHp := maxHp' } p
       g : Game
       g = { rng := rng' } st.game
   in say ItemMsg "You feel better." (setPlayer p' ({ game := g } st))
 applyPotion PotionExtraHealing st =
-  let (n, rng') = roll 2 8 st.game.rng
-      p = st.game.player
+  let p = st.game.player
+      (n, rng') = roll p.level 8 st.game.rng
+      healed = p.hp + n
+      boosted = healed > p.maxHp
+      maxHp' : Int32
+      maxHp' = if boosted
+                  then if healed > p.maxHp + p.level + 1
+                          then p.maxHp + 2
+                          else p.maxHp + 1
+                  else p.maxHp
+      hp' : Int32
+      hp' = if boosted then maxHp' else healed
       p' : Player
-      p' = { hp := min p.maxHp (p.hp + n + 8) } p
+      p' = { hp := hp', maxHp := maxHp' } p
       g : Game
       g = { rng := rng' } st.game
   in say ItemMsg "You feel much better." (setPlayer p' ({ game := g } st))
@@ -1170,7 +1248,7 @@ applyWand WandFire dir st =
 applyWand WandCold dir st =
   zapDamage 6 6 "A cone of cold blasts out!" dir st
 applyWand WandMagicMissile dir st =
-  zapDamage 2 6 "Magic missiles streak away!" dir st
+  zapDamage 1 4 "Magic missiles streak away!" dir st
 applyWand WandPolymorph dir st =
   case beamTarget st.game dir of
     Nothing => say WarningMsg "The beam fizzles." st
@@ -1501,6 +1579,7 @@ dropItem iid st =
 playerAction : Command -> Step -> Step
 playerAction (Move d) st = playerMove d st
 playerAction Wait st = consume st
+playerAction Search st = searchArea st
 playerAction PickUp st = pickUp st
 playerAction (Quaff i) st = quaff i st
 playerAction (Read i) st = read i st
@@ -2004,6 +2083,24 @@ survivalTurn st =
                       (say ItemMsg "The ring hums, and the world shifts." st2)
                else st2
 
+isMoveCommand : Command -> Bool
+isMoveCommand (Move _) = True
+isMoveCommand _ = False
+
+ringSearch : Nat -> Step -> Step
+ringSearch Z st = st
+ringSearch (S k) st =
+  let (st', _) = searchTraps st
+  in ringSearch k st'
+
+||| A ring of searching performs a free search after each successful move,
+||| once per worn ring, as in 5.4.4's `domove`.
+ringSearchAfterMove : Step -> Step
+ringSearchAfterMove st =
+  if isJust st.game.over
+     then st
+     else ringSearch (cast (countRing RingSearching st.game)) st
+
 advanceTurn : Step -> Step
 advanceTurn st =
   let g = st.game
@@ -2043,8 +2140,12 @@ step cmd g =
                               else "You are paralyzed.") st0)
                    else playerAction cmd st0
           changed = st1.game.depth /= g.depth
+          moved = st1.game.player.pos /= g.player.pos || changed
           st2 = if st1.consumed
-                   then let st2a = advanceTurn st1
+                   then let st2a0 = advanceTurn st1
+                            st2a = if isMoveCommand cmd && moved && not changed
+                                      then ringSearchAfterMove st2a0
+                                      else st2a0
                             monstersAct =
                               not (hasStatus Hasted st2a.game.player
                                    && st2a.game.turn `mod` 2 == 0)

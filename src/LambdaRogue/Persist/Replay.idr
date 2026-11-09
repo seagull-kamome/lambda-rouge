@@ -32,6 +32,7 @@ commandToJSON : Command -> JSON
 commandToJSON (Move d) =
   JObject [("type", JString "Move"), ("dir", JString (dirText d))]
 commandToJSON Wait = JObject [("type", JString "Wait")]
+commandToJSON Search = JObject [("type", JString "Search")]
 commandToJSON PickUp = JObject [("type", JString "PickUp")]
 commandToJSON (Quaff i) =
   JObject [("type", JString "Quaff"), ("item", jsonBits32 i)]
@@ -70,6 +71,7 @@ commandFromJSON j = do
   case typ of
     "Move" => Move <$> dirArg j
     "Wait" => Just Wait
+    "Search" => Just Search
     "PickUp" => Just PickUp
     "Quaff" => Quaff <$> itemArg j
     "Read" => Read <$> itemArg j

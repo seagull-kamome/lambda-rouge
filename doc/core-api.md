@@ -1,7 +1,7 @@
 # lambda-rogue Core API 設計
 
-- Status: Draft 1.6（M4 スライス 12 完了。シード生成と `--seed` を反映）
-- Date: 2026-11-08
+- Status: Draft 1.7（M5 スライス 1 の探索・回復・魔法の矢を反映）
+- Date: 2026-11-09
 - 対象: `LambdaRogue.Core.*` と `LambdaRogue.UI.*`、`LambdaRogue.Persist.*`
 - 前提: `doc/design.md` Draft 1.8
 
@@ -387,6 +387,7 @@ public export
 data Command
   = Move Dir
   | Wait
+  | Search
   | PickUp
   | Quaff ItemId
   | Read ItemId
@@ -440,15 +441,21 @@ step : Command -> Game -> Outcome
 3. ターンを消費しないコマンド（不正、キャンセル、インベントリ表示など）は
    ここで終了する。
 4. `turn` を 1 進める。
-5. 階層移動がなく、加速によるスキップでなければ、モンスターを `MonsterId` の
+5. 移動が成立し、searching の指輪を装着していれば、装着数と同じ回数の
+   無料探索を行う。探索は現在の階の未発見トラップを 1 体ずつ判定し、
+   乱数を消費する。待機・攻撃・アイテム使用・階層移動では発動しない。
+6. 階層移動がなく、加速によるスキップでなければ、モンスターを `MonsterId` の
    昇順で行動させる。各モンスターは状態異常を 1 減らし、再生なら HP を 1 回復し、
    行動する。`Fast` / `Hasted` は続けてもう 1 回行動する。
-6. 死亡していなければ、状態異常の経過と毒ダメージ、自然回復、回復の指輪、
+7. 死亡していなければ、状態異常の経過と毒ダメージ、自然回復、回復の指輪、
    空腹、slow digestion、テレポートの指輪を処理する。
-7. 死亡判定を行い、`over` を確定する。
-8. FOV と `explored` を更新し、`Outcome` を返す。
+8. 死亡判定を行い、`over` を確定する。
+9. FOV と `explored` を更新し、`Outcome` を返す。
 
-- 手順 4〜8 の順序はリプレイの同一性に直結する。変更する場合は
+- `Search` は隣接 8 マスの未発見トラップを
+  `uniform (2 + 盲目 2 + 幻覚 3)` の 0 で発見する。1 ターン消費し、
+  移動しない。秘密のドアは生成しないため、対象はトラップだけである。
+- 手順 4〜9 の順序はリプレイの同一性に直結する。変更する場合は
   `doc/rogue-reference.md` 16 章とテストを同時に更新する。
 - モンスターの行動順はリストの添字ではなく `MonsterId` で固定する。
 - 同じターンに複数のモンスターが死ぬ場合も、ID 昇順で処理する。
@@ -467,8 +474,8 @@ step : Command -> Game -> Outcome
 
 - 乱数は Core の `step` の中だけで消費する。
 - UI の描画、アニメーション、ログ、ツールチップ、ミニマップは乱数を消費しない。
-- 乱数の消費順序は「プレイヤー行動 → モンスター行動（ID 昇順）→ 状態異常 →
-  空腹/再生 → その他」の順で固定する。
+- 乱数の消費順序は「プレイヤー行動 → searching の指輪の無料探索 →
+  モンスター行動（ID 昇順）→ 状態異常 → 空腹/再生 → その他」の順で固定する。
 - 乱数を使わない分岐（例: 壁への移動）では、乱数を引かない。
 - `Outcome` に乱数状態を含める。`Game.rng` が唯一の正とする。
 
@@ -1165,6 +1172,7 @@ public export
 data Command
   = Move Dir
   | Wait
+  | Search
   | PickUp
   | Quaff ItemId
   | Read ItemId
@@ -1213,7 +1221,7 @@ data Command
 | `WandLight` | 現在の階層を全探索済みにする |
 | `WandInvisibility` | プレイヤーに `Invisible 20` |
 | `WandLightning` / `WandFire` / `WandCold` | ビーム上の最初のモンスターに 6d6 |
-| `WandMagicMissile` | 同 2d6 |
+| `WandMagicMissile` | 同 1d4 |
 | `WandPolymorph` | 対象を深度の出現プールからランダムな種別に変え、HP を振り直す |
 | `WandHasteMonster` | 対象に `Hasted 20` |
 | `WandSlowMonster` | 対象に `Slowed 20` |
@@ -2024,10 +2032,10 @@ settingsSchema = "lambda-rogue.settings.v1"
   矢印が 1 つでも割り当てられていれば `/ arrows` を添える。
 - パレットの `hint` は `paletteEntriesFor : Keymap -> List PaletteEntry` が
   `formatPrimary` で生成する。固定のヒント文字列は持たない。
-- パレットは 24 項目。`Save settings` / `Reload settings` / `Save and quit` /
+- パレットは 25 項目。`Save settings` / `Reload settings` / `Save and quit` /
   `Load game` はキーを持たない項目として 19 / 20 / 21 / 22 番目に置き、
-  `Quit` が 23 番目である。
-- 狭い 80x24 では 24 項目を 12 行 2 列に分け、広い 120x40 では 1 列に並べる。
+  `Search for traps` が 23 番目、`Quit` が 24 番目である。
+- 狭い 80x24 では 25 項目を 13 行 2 列に分け、広い 120x40 では 1 列に並べる。
 - 設定は `App.Model` の `theme` / `animationsEnabled` / `keymap` にだけ
   存在し、`Game` には保存されない。
 
@@ -2038,7 +2046,7 @@ settingsSchema = "lambda-rogue.settings.v1"
   不正値・重複・未知テーマの拒否、モデルの入力ルーティング、
   設定適用がゲームとリプレイを変えないこと、ファイル往復。
 - `tests/SubsTest.idr`: キーマップ経由の移動・アイテム・方向、
-  24 項目のパレット、設定・セーブ・ロード項目、グローバルキー。
+  25 項目のパレット、設定・セーブ・ロード項目、グローバルキー。
 - `tests/ViewTest.idr`: ヘルプとパレットのヒントが再割り当てに追従すること、
   ワイドヘルプが設定ファイルを示すこと。
 
@@ -2177,7 +2185,7 @@ releaseSessionLock : IO ()
   壊れたファイル、欠損ファイル。
 - セッションロックの取得、生存 PID の拒否、解放、死んだ PID と
   壊れたファイルの再利用。
-- `verify.sh` はクリーンビルド、795 件のテスト、PTY スモークを実行する。
+- `verify.sh` はクリーンビルド、814 件のテスト、PTY スモークを実行する。
 
 ### 28.7 既知の制約
 
@@ -2316,12 +2324,13 @@ M4 の最後に、`Core` のデータ表・式・生成確率を 5.4.4 の公開
 - 出現選択は深度帯の等確率で、原本の `level + rnd(10) - 6` ではない。
 - 群れ生成、モンスターの所持率表、弓・投擲の遠距離攻撃は未実装。
 - 巻物の sleep / scare / hold、remove curse、confuse monster の対象・範囲が違う。
-- 杖の light / magic missile / drain life / cancellation の効果が違う。
-- ポーションの回復量・効果時間は短い固定式で、最大 HP を増やさない。
+- 杖の light / drain life / cancellation の効果が違う。
+- ポーションの幻覚・盲目・透明などの効果時間は短い固定式で、一部の効果は簡略化している。
 - 飢餓は 0 以下で毎ターン 1 HP、失神と `-850` 死亡は未実装。
 - 自然回復は静穏ターンではなくターン番号の剰余で近似する。
 - トラップの命中判定・セーヴ・矢の落下、浮遊のトラップ無効は未実装。
-- searching の指輪、orc の強欲 AI、xeroc の物体擬態、ドラゴンの火炎反射は未実装。
+- 秘密のドアを生成しないため、探索はトラップだけを発見する。
+- orc の強欲 AI、xeroc の物体擬態、ドラゴンの火炎反射は未実装。
 
 ### 29.6 テスト
 
@@ -2334,3 +2343,71 @@ M4 の最後に、`Core` のデータ表・式・生成確率を 5.4.4 の公開
   アイテムの不変条件のテストがある。
 - 正確なチェック数は `verify.sh` の実行結果と
   `doc/m1-measurements.md` を参照する。
+
+## 30. M5 実装ノート（2026-11-09、スライス 1）
+
+探索、searching の指輪、healing / extra healing、magic missile を
+5.4.4 の式に合わせた。既存のリプレイ形式には `Search` を 1 種類追加しただけで、
+他のコマンドの意味と乱数消費順は変えていない。
+
+### 30.1 探索
+
+```idris
+public export
+data Command
+  = ...
+  | Search
+  | ...
+```
+
+- `Search` は 1 ターン消費し、プレイヤーは移動しない。
+- 隣接 8 マスの未発見トラップを、現在の階の `traps` の順に判定する。
+- 各トラップで `uniform (2 + 盲目 2 + 幻覚 3)` を振り、0 なら `revealed`
+  を立てる。通常 1/2、盲目 1/4、幻覚 1/5、盲目 + 幻覚 1/7。
+- 発見時は種別ごとのメッセージ、幻覚中は「You found a trap.」を出す。
+  何も見つからなければ「You search but find nothing.」を出す。
+- 秘密のドアは生成しないため、探索対象はトラップだけである。
+- `searchTraps : Step -> (Step, Bool)` は探索の乱数消費と発見をまとめた
+  内部関数で、`Search` と searching の指輪の両方が使う。
+
+### 30.2 searching の指輪
+
+- 移動が成立したターンだけ、`countRing RingSearching` の回数だけ
+  `searchTraps` を無料で実行する。
+- 待機、攻撃（移動先にモンスターがいる場合）、アイテム使用、階層移動では
+  発動しない。
+- 無料探索は追加のターンを消費せず、「何も見つからない」メッセージも出さない。
+- 実行位置は `advanceTurn` の後、モンスター行動の前である。
+
+### 30.3 回復ポーション
+
+- healing: `roll p.level 4`。`hp + n > maxHp` なら `maxHp + 1` を新しい
+  最大 HP とし、HP もその値にする。
+- extra healing: `roll p.level 8`。`hp + n > maxHp` なら、まず
+  `hp + n > maxHp + level + 1` のとき `maxHp + 2`、そうでなければ
+  `maxHp + 1` を新しい最大 HP とし、HP をその値にする。
+- どちらも超過しなければ HP だけを `min maxHp (hp + n)` まで回復する。
+
+### 30.4 杖 of magic missile
+
+- `WandMagicMissile` のダメージを 1d4 に変更した。ビームは最初に当たった
+  モンスター 1 体だけに効く。
+
+### 30.5 App と永続化
+
+- `CommandId.Search`、既定キー `s`、パレット `Search for traps`
+  （23 番目、全 25 項目）、ヘルプの wait / search / pick up 行を追加した。
+- `Persist.Replay` は `{ "type": "Search" }` を読み書きする。
+  `tests/PersistTest.idr` の往復対象コマンドに `Search` を加えた。
+
+### 30.6 テスト
+
+- `tests/M5Test.idr`（15 チェック）: 探索のターン消費、隣接トラップの発見、
+  遠距離トラップの非発見、空探索のメッセージ、searching の指輪の移動時発動、
+  待機時の非発動、healing / extra healing のダイスと最大 HP 増加、
+  magic missile の 1d4。
+- `tests/M3Test.idr` の extra healing は、固定の全回復ではなく
+  「HP が増え、最大 HP を超えない」ことを検証する形に更新した。
+- `tests/SettingsTest.idr`、`tests/SubsTest.idr`、`tests/ViewTest.idr` に
+  `s` キー、パレット 25 項目、ヘルプの search 表示を追加した。
+- 全体は 795 チェックから 814 チェックへ増えた。

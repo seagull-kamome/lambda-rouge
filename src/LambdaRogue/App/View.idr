@@ -480,7 +480,7 @@ helpLines : Keymap -> List String
 helpLines km =
   [ "Movement"
   , helpRow (movementText km) "move (8 directions)"
-  , helpRow (allKeysText km [Wait, PickUp]) "wait / pick up"
+  , helpRow (allKeysText km [Wait, Search, PickUp]) "wait / search / pick up"
   , helpRow (allKeysText km [Descend, Ascend]) "descend / ascend stairs"
   , "Items"
   , helpRow (formatKeys (keysFor Inventory km)) "inventory (a-z, Enter)"

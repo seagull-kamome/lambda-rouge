@@ -63,6 +63,8 @@ run = do
     (commandForChord (ctrlKey 's') defaultKeymap == Just Share)
   check "q quaffs by default"
     (commandForChord (plain 'q') defaultKeymap == Just Quaff)
+  check "s searches for traps by default"
+    (commandForChord (plain 's') defaultKeymap == Just Search)
   check "Q quits by default"
     (commandForChord (plain 'Q') defaultKeymap == Just Quit)
   check "the default keymap has no duplicate chords"

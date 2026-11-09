@@ -1,7 +1,7 @@
 # lambda-rogue 永続化・リプレイ設計
 
-- Status: Draft 0.7（シード生成と `--seed` を反映）
-- Date: 2026-11-08
+- Status: Draft 0.8（M5 スライス 1 の `Search` コマンドを反映）
+- Date: 2026-11-09
 - 対象: `LambdaRogue.Persist.*`, `LambdaRogue.Core.Replay`
 - 前提: `doc/design.md` Draft 1.8, `doc/core-api.md` Draft 1.6
 
@@ -353,7 +353,7 @@ $XDG_DATA_HOME/lambda-rogue/       # なければ ~/.local/share/lambda-rogue/
 | `type` | 追加フィールド |
 | --- | --- |
 | `Move` | `dir`: `N`, `NE`, `E`, `SE`, `S`, `SW`, `W`, `NW` |
-| `Wait`, `PickUp`, `Descend`, `Ascend` | なし |
+| `Wait`, `Search`, `PickUp`, `Descend`, `Ascend` | なし |
 | `Quaff`, `Read`, `Eat`, `Wield`, `Wear`, `PutOnRing`, `TakeOff`, `Drop` | `item`: `ItemId` |
 | `Throw`, `Zap` | `item`: `ItemId`, `dir`: 方向 |
 

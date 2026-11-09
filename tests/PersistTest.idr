@@ -96,7 +96,7 @@ replaySeed = 0x0123456789abcdef
 replayCommandsList : List Command
 replayCommandsList =
   [ Move N, Move NE, Move E, Move SE, Move S, Move SW, Move W, Move NW
-  , Wait, PickUp
+  , Wait, Search, PickUp
   , Quaff 1, Read 2, Eat 3, Wield 4, Wear 5, PutOnRing 6, TakeOff 7, Drop 8
   , Throw 9 SE, Zap 10 NW, Descend, Ascend
   ]

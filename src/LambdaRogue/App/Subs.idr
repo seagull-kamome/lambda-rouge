@@ -52,6 +52,7 @@ commandMsg MoveNorthEast = Do (Move NE)
 commandMsg MoveSouthWest = Do (Move SW)
 commandMsg MoveSouthEast = Do (Move SE)
 commandMsg Wait = Do Wait
+commandMsg Search = Do Search
 commandMsg PickUp = Do PickUp
 commandMsg Descend = Do Descend
 commandMsg Ascend = Do Ascend

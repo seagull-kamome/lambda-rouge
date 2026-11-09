@@ -11,6 +11,7 @@ import DungeonTest
 import FuzzTest
 import M3Test
 import M4Test
+import M5Test
 import MapViewTest
 import MouseTest
 import PerfTest
@@ -36,6 +37,7 @@ main = do
   FuzzTest.run
   M3Test.run
   M4Test.run
+  M5Test.run
   MapViewTest.run
   MouseTest.run
   ReplayTest.run
