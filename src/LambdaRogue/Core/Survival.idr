@@ -6,6 +6,7 @@
 module LambdaRogue.Core.Survival
 
 import Data.List
+import LambdaRogue.Core.Message
 import LambdaRogue.Core.Types
 
 %default covering
@@ -55,30 +56,14 @@ hungerState h =
   else if h > starvingAt then Weak
   else Fainting
 
-expiryMessage : StatusKind -> String
-expiryMessage Confused = "You are no longer confused."
-expiryMessage Blinded = "You can see again."
-expiryMessage Hasted = "You feel yourself slow down."
-expiryMessage SeeInvisible = "Your eyes feel normal again."
-expiryMessage DetectMonsters = "Your senses return to normal."
-expiryMessage DetectFood = "Your food sense fades."
-expiryMessage DetectMagic = "Your magic sense fades."
-expiryMessage Invisible = "You are no longer invisible."
-expiryMessage Poisoned = "The poison wears off."
-expiryMessage Held = "You can move again."
-expiryMessage Slowed = "You feel normal again."
-expiryMessage Paralyzed = "You can move again."
-expiryMessage Scared = "You feel brave again."
-expiryMessage Sleeping = "You wake up."
-expiryMessage Hallucinating = "Everything looks normal again."
-expiryMessage Levitated = "You float gently back to the floor."
-expiryMessage ConfuseNext = "Your hands stop glowing."
+expiryMessage : StatusKind -> Msg
+expiryMessage = StatusExpires
 
 statusDamage : List Status -> Int32
 statusDamage ss =
   foldl (\acc, s => if s.statusKind == Poisoned then acc + 1 else acc) 0 ss
 
-tickStatuses : Player -> (Player, List String)
+tickStatuses : Player -> (Player, List Msg)
 tickStatuses p =
   let stepped = map (\s => { remaining := s.remaining - 1 } s) p.statuses
       expired = filter (\s => s.remaining <= 0) stepped
@@ -96,7 +81,7 @@ public export
 record SurvivalResult where
   constructor MkSurvivalResult
   player : Player
-  messages : List String
+  messages : List Msg
   died : Maybe DeathCause
 
 public export
@@ -107,12 +92,12 @@ tickSurvival p0 =
       h0 = p0.hunger
       h1 : Int32
       h1 = h0 - 1
-      hungerMsgs : List String
+      hungerMsgs : List Msg
       hungerMsgs =
-        (if h0 > hungryAt && h1 <= hungryAt then ["You are hungry."] else [])
-        ++ (if h0 > weakAt && h1 <= weakAt then ["You are weak."] else [])
+        (if h0 > hungryAt && h1 <= hungryAt then [Hungry] else [])
+        ++ (if h0 > weakAt && h1 <= weakAt then [WeakFromHunger] else [])
         ++ (if h0 > starvingAt && h1 <= starvingAt
-               then ["You faint from lack of food."]
+               then [FaintFromHunger]
                else [])
       starving = h1 <= starvingAt
       hp' : Int32

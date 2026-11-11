@@ -6,6 +6,7 @@
 module LambdaRogue.App.Startup
 
 import Data.Bits
+import LambdaRogue.App.Catalog
 import LambdaRogue.Core.Rng
 import LambdaRogue.Core.Types
 
@@ -37,22 +38,44 @@ combineSeed nanos pid =
       process = the Bits64 (cast pid)
   in time `xor` (process `shiftL` 32)
 
+||| Everything the command line can select for this launch.
+public export
+record StartOptions where
+  constructor MkStartOptions
+  seed : StartSeed
+  language : Maybe Language
+
 ||| Parse the command line.  Unknown arguments are ignored so that the
 ||| executable name and terminal wrappers do not have to be special-cased.
-||| A malformed `--seed` is an error rather than silently starting a
-||| different run from the one the player asked for.
+||| A malformed `--seed` or `--lang` is an error rather than silently
+||| starting a different run from the one the player asked for.
+public export
+parseStartOptionsIn : Language -> List String -> Either String StartOptions
+parseStartOptionsIn lang args = go args GeneratedSeed Nothing
+  where
+    go : List String -> StartSeed -> Maybe Language -> Either String StartOptions
+    go [] seed language = Right (MkStartOptions seed language)
+    go ("--seed" :: []) _ _ =
+      Left (uiText lang MissingSeedValue)
+    go ("--seed" :: value :: rest) _ language =
+      case seedFromHex value of
+        Just seed => go rest (ExplicitSeed seed) language
+        Nothing =>
+          Left (uiTextArgs lang InvalidSeedValue [value])
+    go ("--lang" :: []) _ _ =
+      Left (uiText lang MissingLangValue)
+    go ("--lang" :: value :: rest) seed _ =
+      case languageFromId value of
+        Just language => go rest seed (Just language)
+        Nothing =>
+          Left (uiTextArgs lang InvalidLangValue [value])
+    go (_ :: rest) seed language = go rest seed language
+
+public export
+parseStartOptions : List String -> Either String StartOptions
+parseStartOptions = parseStartOptionsIn English
+
+||| The seed-only view retained for callers that do not need `--lang`.
 public export
 parseStartSeed : List String -> Either String StartSeed
-parseStartSeed = go
-  where
-    go : List String -> Either String StartSeed
-    go [] = Right GeneratedSeed
-    go ("--seed" :: []) =
-      Left "missing value for --seed (expected 16 lowercase hex digits)"
-    go ("--seed" :: value :: _) =
-      case seedFromHex value of
-        Just seed => Right (ExplicitSeed seed)
-        Nothing =>
-          Left ("invalid --seed value: " ++ value
-                ++ " (expected 16 lowercase hex digits)")
-    go (_ :: rest) = go rest
+parseStartSeed args = map (.seed) (parseStartOptions args)

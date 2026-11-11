@@ -10,10 +10,12 @@ import Data.List
 import Data.Maybe
 import Data.String
 import Data.Vect
+import LambdaRogue.App.Catalog
 import LambdaRogue.App.Model
 import LambdaRogue.Core.Bitset
 import LambdaRogue.Core.Dungeon
 import LambdaRogue.Core.Game
+import LambdaRogue.Core.Message
 import LambdaRogue.Core.Replay
 import LambdaRogue.Core.Rng
 import LambdaRogue.Core.Types
@@ -42,6 +44,27 @@ removeIfPresent : String -> IO ()
 removeIfPresent path = do
   _ <- removeFile path
   pure ()
+
+replaceField : String -> JSON -> List (String, JSON) -> List (String, JSON)
+replaceField name value [] = [(name, value)]
+replaceField name value ((key, old) :: rest) =
+  if key == name
+     then (name, value) :: rest
+     else (key, old) :: replaceField name value rest
+
+replaceMessageList : JSON -> JSON -> Maybe JSON
+replaceMessageList messages (JObject fields) =
+  Just (JObject (replaceField "messages" messages fields))
+replaceMessageList _ _ = Nothing
+
+replaceGameMessages : JSON -> JSON -> Maybe JSON
+replaceGameMessages messages (JObject fields) =
+  case lookup "game" fields of
+    Just game => case replaceMessageList messages game of
+                   Just game' => Just (JObject (replaceField "game" game' fields))
+                   Nothing => Nothing
+    Nothing => Nothing
+replaceGameMessages _ _ = Nothing
 
 sameScore : Score -> Score -> Bool
 sameScore a b =
@@ -226,6 +249,9 @@ run = do
        Nothing => False)
   check "a score line names its schema"
     (isInfixOf (unpack scoreSchema) (unpack (scoreToLine scoreWon)))
+  check "a dead score line records the cause"
+    (isInfixOf (unpack "\"cause\"") (unpack (scoreToLine scoreDead))
+     && isInfixOf (unpack "dragon") (unpack (scoreToLine scoreDead)))
   check "a score line without fields is rejected"
     (isNothing (scoreFromLine "{\"schema\":\"lambda-rogue.score.v1\"}"))
   check "a non-JSON score line is rejected"
@@ -465,7 +491,7 @@ run = do
       unicodePath = "/tmp/opencode/lambda-rogue-persist-unicode.json"
       unicodeGame : Game
       unicodeGame =
-        { messages := [MkMessage 0 SystemMsg "回復しました"] } g0
+        { messages := [legacyMessage 0 SystemMsg "回復しました"] } g0
   removeIfPresent unicodePath
   unicodeSaved <- saveGameAt unicodePath Manual unicodeGame
   unicodeLoaded <- loadSaveAt unicodePath
@@ -475,6 +501,59 @@ run = do
            Just saved => map (\m => m.text) saved.game.messages
                            == ["回復しました"]
            Nothing => False))
+
+  let keyedGame : Game
+      keyedGame =
+        { messages := [mkMessage 3 CombatMsg
+                        (MonsterTakesDamage ThrownItem Orc 5)] } g0
+      keyedMessage : Message
+      keyedMessage = mkMessage 3 CombatMsg
+                       (MonsterTakesDamage ThrownItem Orc 5)
+  check "a save round-trips message keys and arguments"
+    (case saveFromJSON (saveToJSON Manual stamp keyedGame) of
+       Just saved => case saved.game.messages of
+                       [m] => m.key == "monster-takes-damage"
+                              && m.args == ["thrown", "orc", "5"]
+                              && m.text == msgEn (MonsterTakesDamage ThrownItem Orc 5)
+                       _ => False
+       Nothing => False)
+  check "a saved Japanese render uses the key and arguments"
+    (renderMessage Japanese keyedMessage
+     == "投げたものが当たった！ あなたはorcに5のダメージを与えた。")
+
+  let legacyJSON : JSON
+      legacyJSON =
+        JObject [ ("turn", jsonInt 0)
+                , ("kind", JString (messageKindText SystemMsg))
+                , ("text", JString "old cave text")
+                ]
+      legacySave = replaceGameMessages (JArray [legacyJSON])
+                     (saveToJSON Manual stamp g0)
+  check "a pre-catalog save loads its English message"
+    (case legacySave of
+       Just json => case saveFromJSON json of
+                      Just saved => case saved.game.messages of
+                                      [m] => m.key == ""
+                                             && m.args == []
+                                             && renderMessage Japanese m
+                                                == "old cave text"
+                                      _ => False
+                      Nothing => False
+       Nothing => False)
+  let badArgsJSON : JSON
+      badArgsJSON =
+        JObject [ ("turn", jsonInt 0)
+                , ("kind", JString (messageKindText SystemMsg))
+                , ("key", JString "damage")
+                , ("args", JString "not a list")
+                , ("text", JString "bad")
+                ]
+      badArgsSave = replaceGameMessages (JArray [badArgsJSON])
+                      (saveToJSON Manual stamp g0)
+  check "a save with malformed message arguments is rejected"
+    (case badArgsSave of
+       Just json => isNothing (saveFromJSON json)
+       Nothing => False)
   removeIfPresent unicodePath
   removeIfPresent (unicodePath ++ ".bak")
   _ <- writeFile savePath "{broken save"

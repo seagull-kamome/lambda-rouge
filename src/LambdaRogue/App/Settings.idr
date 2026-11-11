@@ -10,6 +10,7 @@ module LambdaRogue.App.Settings
 import Data.List
 import Data.Maybe
 import Language.JSON
+import LambdaRogue.App.Catalog
 import LambdaRogue.App.Keymap
 import LambdaRogue.UI.Theme
 
@@ -21,16 +22,18 @@ record Settings where
   theme : Theme
   animationsEnabled : Bool
   keymap : Keymap
+  language : Language
 
 public export
 Eq Settings where
   a == b = a.theme == b.theme
            && a.animationsEnabled == b.animationsEnabled
            && a.keymap == b.keymap
+           && a.language == b.language
 
 public export
 defaultSettings : Settings
-defaultSettings = MkSettings ClassicCga True defaultKeymap
+defaultSettings = MkSettings ClassicCga True defaultKeymap English
 
 public export
 settingsSchema : String
@@ -90,7 +93,15 @@ settingsFromJSON json@(JObject _) = do
        keymap <- case lookup "keys" json of
                    Nothing => Just defaultKeymap
                    Just v => parseKeymap v
-       pure (MkSettings theme animations keymap)
+       -- Missing language keeps the documented English default.  An
+       -- unknown future id also falls back to English so a newer settings
+       -- file still starts this build.
+       language <- case lookup "language" json of
+                     Nothing => Just English
+                     Just (JString value) =>
+                       Just (fromMaybe English (languageFromId value))
+                     Just _ => Nothing
+       pure (MkSettings theme animations keymap language)
 settingsFromJSON _ = Nothing
 
 public export
@@ -108,6 +119,7 @@ settingsToJSON s =
     [ ("schema", JString settingsSchema)
     , ("theme", JString (themeId s.theme))
     , ("animation", JBoolean s.animationsEnabled)
+    , ("language", JString (languageId s.language))
     , ("keys", JObject (map bindingJSON s.keymap))
     ]
 

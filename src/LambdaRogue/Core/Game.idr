@@ -15,6 +15,7 @@ import LambdaRogue.Core.Dungeon
 import LambdaRogue.Core.Fov
 import LambdaRogue.Core.Geometry
 import LambdaRogue.Core.Item
+import LambdaRogue.Core.Message
 import LambdaRogue.Core.Monster
 import LambdaRogue.Core.Rng
 import LambdaRogue.Core.Survival
@@ -131,10 +132,10 @@ record Step where
   newMessages : List Message
   consumed : Bool
 
-say : MessageKind -> String -> Step -> Step
-say kind text st =
+say : MessageKind -> Msg -> Step -> Step
+say kind message st =
   let msg : Message
-      msg = MkMessage st.game.turn kind text
+      msg = mkMessage st.game.turn kind message
       g : Game
       g = { messages := take 200 (msg :: st.game.messages) } st.game
   in { game := g, newMessages := msg :: st.newMessages } st
@@ -206,13 +207,13 @@ damagePlayer cause dmg st =
       p = { hp := hp' } g.player
       g1 : Game
       g1 = { player := p } g
-      st1 = say WarningMsg ("You take " ++ show dmg ++ " damage.")
+      st1 = say WarningMsg (TakeDamage dmg)
               ({ game := g1 } st)
   in if hp' <= 0
         then let g2 : Game
                  g2 = { over := Just (Dead cause) } g1
              in event PlayerDied
-                  (say WarningMsg ("You die... " ++ show cause ++ ".")
+                  (say WarningMsg (Die False cause)
                     ({ game := g2 } st1))
         else st1
 
@@ -221,7 +222,7 @@ addLevelUpMessages er st =
   if er.levelsGained == 0
      then st
      else event (PlayerLevelUp er.player.level)
-            (say SystemMsg ("Welcome to level " ++ show er.player.level ++ "!")
+            (say SystemMsg (WelcomeLevel er.player.level)
                 st)
 
 ||| Replace one item in the run-wide item list.
@@ -310,24 +311,23 @@ recomputeRings g =
 
 ||| Apply one point of rust to the worn armor, honouring protection and
 ||| the ring of maintain armor.  The caller supplies the narrative lead.
-rustPlayerArmor : String -> Step -> Step
-rustPlayerArmor lead st =
+rustPlayerArmor : RustSource -> Step -> Step
+rustPlayerArmor src st =
   case st.game.player.worn of
-    Nothing => say WarningMsg (lead ++ " Your armor is unaffected.") st
+    Nothing => say WarningMsg (ArmorUnaffected src) st
     Just iid =>
       case findPackItem st.game iid of
-        Nothing => say WarningMsg (lead ++ " Your armor is unaffected.") st
+        Nothing => say WarningMsg (ArmorUnaffected src) st
         Just it =>
           if it.protected || hasRing RingMaintainArmor st.game
-             then say ItemMsg "Your armor is protected from the rust." st
+             then say ItemMsg ArmorProtected st
              else let g1 : Game
                       g1 = updateItem iid
                              (\i => { enchant := i.enchant - 1 } i) st.game
                       g2 : Game
                       g2 = recomputeArmor g1
                   in say WarningMsg
-                       (lead ++ " Your " ++ itemDisplayNameIn g2 it
-                        ++ " weakens.")
+                       (ArmorWeakens src (itemDisplayNameIn g2 it))
                        ({ game := g2 } st)
 
 fullMapBits : Bitset
@@ -389,7 +389,7 @@ beamTarget g d = go (beamCells g d)
         Just m => Just (c, m)
         Nothing => go cs
 
-damageMonster : Monster -> Int32 -> String -> Step -> Step
+damageMonster : Monster -> Int32 -> AttackLead -> Step -> Step
 damageMonster m dmg lead st =
   let g = st.game
       lvl = currentLevel g
@@ -409,8 +409,7 @@ damageMonster m dmg lead st =
                  g2 = { player := er.player, rng := er.rng } g1d
                  st1 = event (MonsterDied m.id)
                          (say CombatMsg
-                           (lead ++ " You kill the "
-                            ++ monsterName m.kind ++ ".")
+                           (KillMonster lead m.kind)
                            ({ game := g2 } st))
              in addLevelUpMessages er st1
         else let lvl' : Level
@@ -419,8 +418,7 @@ damageMonster m dmg lead st =
                  g1 = updateCurrentLevel (const lvl') g
              in event (PlayerAttacked m.id dmg')
                   (say CombatMsg
-                    (lead ++ " The " ++ monsterName m.kind
-                     ++ " takes " ++ show dmg' ++ " damage.")
+                    (MonsterTakesDamage lead m.kind dmg')
                     ({ game := g1 } st))
 
 identifyFirst : (ItemKind -> Bool) -> Game -> (Game, Maybe Item)
@@ -441,14 +439,14 @@ teleportMonster m st =
                      (allWalkableCells lvl.tiles)
       (targetOpt, rng') = pick cells g.rng
   in case targetOpt of
-       Nothing => say WarningMsg "The monster resists." st
+       Nothing => say WarningMsg MonsterResists st
        Just target =>
          let lvl' : Level
              lvl' = updateMonster m.id (\mm => { pos := target } mm) lvl
              g' : Game
              g' = { rng := rng' }
                     (updateCurrentLevel (const lvl') g)
-         in say SystemMsg ("The " ++ monsterName m.kind ++ " vanishes.")
+         in say SystemMsg (MonsterVanishes m.kind)
               ({ game := g' } st)
 
 createMonsterNear : Step -> Step
@@ -472,9 +470,9 @@ createMonsterNear st =
              g' : Game
              g' = { rng := g3, nextMonsterId := g.nextMonsterId + 1 }
                     (updateCurrentLevel (const lvl') g)
-         in say SystemMsg ("A " ++ monsterName kind ++ " appears!")
+         in say SystemMsg (MonsterAppears kind)
               ({ game := g' } st)
-       _ => say WarningMsg "The scroll fizzles." st
+       _ => say WarningMsg ScrollFizzles st
 
 attackMonster : Monster -> Step -> Step
 attackMonster m st =
@@ -486,7 +484,7 @@ attackMonster m st =
   in case result of
        Miss =>
          event (PlayerAttacked m.id 0)
-           (consume (say CombatMsg ("You miss the " ++ monsterName m.kind ++ ".")
+           (consume (say CombatMsg (MissMonster m.kind)
                        ({ game := g1 } st)))
        Hit dmg =>
          let confuse = hasStatus ConfuseNext g1.player
@@ -506,14 +504,9 @@ attackMonster m st =
              g2 : Game
              g2 = { player := player' }
                     (updateCurrentLevel (const lvl') g1)
-             extra : String
-             extra = if confuse
-                        then " The " ++ monsterName m.kind ++ " looks confused."
-                        else ""
          in event (PlayerAttacked m.id dmg)
               (consume (say CombatMsg
-                ("You hit the " ++ monsterName m.kind ++ " for " ++ show dmg
-                 ++ "." ++ extra)
+                (HitMonster m.kind dmg confuse)
                 ({ game := g2 } st)))
        Killed dmg =>
          let lvl' : Level
@@ -529,7 +522,7 @@ attackMonster m st =
              g3 = { player := er.player, rng := er.rng } g2d
              st1 = event (MonsterDied m.id)
                      (consume (say CombatMsg
-                       ("You kill the " ++ monsterName m.kind ++ ".")
+                       (KillMonsterPlain m.kind)
                        ({ game := g3 } st)))
          in addLevelUpMessages er st1
 
@@ -537,15 +530,15 @@ openDoor : Coord -> Step -> Step
 openDoor c st =
   let g = st.game
       lvl = currentLevel g
-      text = case tileAt lvl.tiles c of
-               Just (Door Secret) => "You found a secret door!"
-               _ => "You open the door."
+      message = case tileAt lvl.tiles c of
+                  Just (Door Secret) => FoundSecretDoor
+                  _ => OpenDoor
       lvl' : Level
       lvl' = { tiles := setTile c (Door Open) lvl.tiles } lvl
       g' : Game
       g' = updateCurrentLevel (const lvl') g
   in event (DoorOpened c)
-       (consume (say SystemMsg text ({ game := g' } st)))
+       (consume (say SystemMsg message ({ game := g' } st)))
 
 trapDamage : TrapKind -> Int32 -> Int32 -> Step -> Step
 trapDamage kind n sides st =
@@ -556,14 +549,13 @@ trapDamage kind n sides st =
       player' = { hp := hp' } g.player
       g1 : Game
       g1 = { rng := rng', player := player' } g
-      hit = say WarningMsg ("You take " ++ show dmg ++ " damage.")
+      hit = say WarningMsg (TakeDamage dmg)
               ({ game := g1 } st)
   in if hp' <= 0
        then let g2 : Game
                 g2 = { over := Just (Dead (KilledByTrap kind)) } g1
             in event PlayerDied
-                 (say WarningMsg
-                   ("You die... Killed by a " ++ show kind ++ ".")
+                 (say WarningMsg (Die True (KilledByTrap kind))
                    ({ game := g2 } st))
        else hit
 
@@ -576,20 +568,20 @@ teleportPlayer st =
                      (allWalkableCells lvl.tiles)
       (targetOpt, rng') = pick cells g.rng
   in case targetOpt of
-       Nothing => say WarningMsg "The teleport trap fizzles." st
+       Nothing => say WarningMsg TeleportFizzles st
        Just target =>
          let player' : Player
              player' = { pos := target } g.player
              g' : Game
              g' = { rng := rng', player := player' } g
-         in say SystemMsg ("You are teleported to " ++ show target ++ ".")
+         in say SystemMsg (Teleported target)
               ({ game := g' } st)
 
 descendLevel : Step -> Step
 descendLevel st =
   let g = st.game
   in if g.depth >= 26
-       then say WarningMsg "You cannot descend further." st
+       then say WarningMsg CannotDescend st
        else case find (\l => l.depth == g.depth + 1) g.levels of
               Just existing =>
                 let rest = filter (\l => l.depth /= existing.depth) g.levels
@@ -603,7 +595,7 @@ descendLevel st =
                          } g
                 in event (LevelChanged g'.depth)
                      (consume (say SystemMsg
-                       ("You descend to level " ++ show g'.depth ++ ".")
+                       (DescendLevel g'.depth)
                        ({ game := g' } st)))
               Nothing =>
                 let gen = generateLevel (g.depth + 1) g.nextMonsterId
@@ -622,7 +614,7 @@ descendLevel st =
                          } g
                 in event (LevelChanged g'.depth)
                      (consume (say SystemMsg
-                       ("You descend to level " ++ show g'.depth ++ ".")
+                       (DescendLevel g'.depth)
                        ({ game := g' } st)))
 
 winGame : Step -> Step
@@ -630,16 +622,14 @@ winGame st =
   let g : Game
       g = { over := Just Won } st.game
   in event PlayerWon
-       (say StoryMsg
-         "You return to the surface with the Amulet of Yendor! You win!"
+       (say StoryMsg WinGame
          ({ game := g } st))
 
 ascendLevel : Step -> Step
 ascendLevel st =
   let g = st.game
   in if not (hasAmulet g)
-        then say WarningMsg
-               "You cannot return without the Amulet of Yendor." st
+        then say WarningMsg CannotReturn st
         else if g.depth <= 1
                 then consume (winGame st)
                 else case find (\l => l.depth == g.depth - 1) g.levels of
@@ -658,10 +648,10 @@ ascendLevel st =
                                   } g
                              st1 = event (LevelChanged g'.depth)
                                      (consume (say SystemMsg
-                                       ("You ascend to level " ++ show g'.depth ++ ".")
+                                       (AscendLevel g'.depth)
                                        ({ game := g' } st)))
                          in st1
-                       Nothing => say WarningMsg "The way up is blocked." st
+                       Nothing => say WarningMsg WayUpBlocked st
 
 applyTrap : Trap -> Step -> Step
 applyTrap trap st =
@@ -676,22 +666,22 @@ applyTrap trap st =
       in if isJust st1.game.over
             then st1
             else if hasRing RingSustainStrength st1.game
-                    then say WarningMsg "You feel weak, but your strength holds." st1
+                    then say WarningMsg StrengthHolds st1
                     else let p = st1.game.player
                              p' : Player
                              p' = { strength := max 0 (p.strength - 1) } p
-                         in say WarningMsg "You feel weaker."
+                         in say WarningMsg FeelWeaker
                               (setPlayer p' st1)
     Bear =>
-      say WarningMsg "The bear trap snaps shut on your leg!"
+      say WarningMsg BearTrap
         (setPlayer (addStatus Held 4 st.game.player) st)
     Teleport => teleportPlayer st
     Sleep =>
-      say WarningMsg "You fall asleep."
+      say WarningMsg FallAsleep
         (setPlayer (addStatus Sleeping 6 st.game.player) st)
-    Rust => rustPlayerArmor "The rust trap corrodes your armor." st
+    Rust => rustPlayerArmor RustTrap st
     Mysterious =>
-      say SystemMsg "You hear a strange noise in the distance." st
+      say SystemMsg StrangeNoise st
 
 triggerTrap : Coord -> Step -> Step
 triggerTrap c st =
@@ -708,7 +698,7 @@ triggerTrap c st =
              g' : Game
              g' = updateCurrentLevel (const lvl') st.game
              st1 = event (TrapTriggered trap.kind c)
-                     (say SystemMsg ("You trigger a " ++ show trap.kind ++ ".")
+                     (say SystemMsg (TriggerTrap trap.kind)
                          ({ game := g' } st))
          in applyTrap trap st1
 
@@ -758,10 +748,10 @@ searchTraps st0 =
                     st1 = { game := { rng := rng' } st.game } st
                 in if roll' == 0
                       then let g' = revealTrapAt t.pos st1.game
-                               text = if hasStatus Hallucinating st1.game.player
-                                         then "You found a trap."
-                                         else trapFoundMessage t.kind
-                           in (say SystemMsg text ({ game := g' } st1), True)
+                               message = if hasStatus Hallucinating st1.game.player
+                                            then FoundTrapUnknown
+                                            else FoundTrap t.kind
+                           in (say SystemMsg message ({ game := g' } st1), True)
                       else (st1, found)
   in foldl visit (st0, False) (currentLevel st0.game).traps
 
@@ -770,7 +760,7 @@ searchArea st =
   let (st', found) = searchTraps st
   in consume (if found
                  then st'
-                 else say SystemMsg "You search but find nothing." st')
+                 else say SystemMsg SearchNothing st')
 
 playerMove : Dir -> Step -> Step
 playerMove d st =
@@ -788,18 +778,18 @@ playerMove d st =
       lvl = currentLevel g
   in if hasStatus Held g.player
         && isNothing (monsterAt lvl target)
-        then consume (say WarningMsg "You are held in place." st0)
+        then consume (say WarningMsg HeldInPlace st0)
         else if not (inBounds target)
-                then say WarningMsg "There is a wall there." st0
+                then say WarningMsg WallThere st0
                 else case tileAt lvl.tiles target of
-                       Nothing => say WarningMsg "There is a wall there." st0
+                       Nothing => say WarningMsg WallThere st0
                        Just (Door Locked) =>
-                         say WarningMsg "The door is locked." st0
+                         say WarningMsg DoorLocked st0
                        Just t =>
                          if openable t
                             then openDoor target st0
                             else if not (walkable t)
-                                    then say WarningMsg "There is a wall there." st0
+                                    then say WarningMsg WallThere st0
                                     else case monsterAt lvl target of
                                            Just m => attackMonster m st0
                                            Nothing =>
@@ -823,15 +813,13 @@ stairsAction dir st =
             then case dir of
                    Down => descendLevel st
                    Up => ascendLevel st
-            else say WarningMsg
-                   ("You are not standing on " ++ show dir ++ " stairs.") st
-       _ => say WarningMsg
-              ("You are not standing on " ++ show dir ++ " stairs.") st
+            else say WarningMsg (NotOnStairs dir) st
+       _ => say WarningMsg (NotOnStairs dir) st
 
 pickUp : Step -> Step
 pickUp st =
   case itemAt st.game st.game.player.pos of
-    Nothing => say WarningMsg "There is nothing here to pick up." st
+    Nothing => say WarningMsg NothingHere st
     Just it =>
       case it.kind of
         Gold =>
@@ -844,11 +832,11 @@ pickUp st =
               g' = { items := items', player := player' } g
           in event (ItemPicked it.id)
                (consume (say ItemMsg
-                 ("You pick up " ++ show it.count ++ " gold.")
+                 (PickUpGold it.count)
                  ({ game := g' } st)))
         _ =>
           if length st.game.player.inventory >= maxPack
-             then say WarningMsg "Your pack is full." st
+             then say WarningMsg PackFull st
              else let g = st.game
                       items' : List Item
                       items' = map (\i => if i.id == it.id
@@ -861,11 +849,11 @@ pickUp st =
                       g' : Game
                       g' = { items := items', player := player' } g
                       shown = itemDisplayNameIn g' it
-                      text = if it.kind == Amulet
-                                then "You pick up the Amulet of Yendor!"
-                                else "You pick up the " ++ shown ++ "."
+                      message = if it.kind == Amulet
+                                   then PickUpAmulet
+                                   else PickUpItem shown
                   in event (ItemPicked it.id)
-                       (consume (say ItemMsg text ({ game := g' } st)))
+                       (consume (say ItemMsg message ({ game := g' } st)))
 
 applyPotion : PotionKind -> Step -> Step
 applyPotion PotionHealing st =
@@ -880,7 +868,7 @@ applyPotion PotionHealing st =
       p' = { hp := hp', maxHp := maxHp' } p
       g : Game
       g = { rng := rng' } st.game
-  in say ItemMsg "You feel better." (setPlayer p' ({ game := g } st))
+  in say ItemMsg FeelBetter (setPlayer p' ({ game := g } st))
 applyPotion PotionExtraHealing st =
   let p = st.game.player
       (n, rng') = roll p.level 8 st.game.rng
@@ -898,26 +886,26 @@ applyPotion PotionExtraHealing st =
       p' = { hp := hp', maxHp := maxHp' } p
       g : Game
       g = { rng := rng' } st.game
-  in say ItemMsg "You feel much better." (setPlayer p' ({ game := g } st))
+  in say ItemMsg FeelMuchBetter (setPlayer p' ({ game := g } st))
 applyPotion PotionStrength st =
   let p = st.game.player
   in if p.strength >= 31
-        then say ItemMsg "You feel very strong already." st
+        then say ItemMsg AlreadyStrong st
         else let s = p.strength + 1
                  p' : Player
                  p' = { strength := s, maxStrength := max p.maxStrength s } p
-             in say ItemMsg "You feel stronger." (setPlayer p' st)
+             in say ItemMsg FeelStronger (setPlayer p' st)
 applyPotion PotionRestoreStrength st =
   let p = st.game.player
       p' : Player
       p' = { strength := p.maxStrength } p
-  in say ItemMsg "Your strength returns." (setPlayer p' st)
+  in say ItemMsg StrengthReturns (setPlayer p' st)
 applyPotion PotionPoison st =
   let (drain, rng1) = roll 1 3 st.game.rng
       g : Game
       g = { rng := rng1 } st.game
   in if hasRing RingSustainStrength g
-        then say ItemMsg "You feel a little sick, but your strength holds."
+        then say ItemMsg SickStrengthHolds
                ({ game := g } st)
         else let p = g.player
                  p' : Player
@@ -925,33 +913,33 @@ applyPotion PotionPoison st =
                       , statuses := filter
                           (\s => s.statusKind /= Hallucinating) p.statuses
                       } p
-             in say WarningMsg "You feel weaker and your head clears."
+             in say WarningMsg WeakerHeadClears
                   (setPlayer p' ({ game := g } st))
 applyPotion PotionConfusion st =
   let (turns, rng') = roll 1 8 st.game.rng
       p' = addStatus Confused (turns + 4) st.game.player
       g : Game
       g = { rng := rng' } st.game
-  in say ItemMsg "You feel confused." (setPlayer p' ({ game := g } st))
+  in say ItemMsg FeelConfused (setPlayer p' ({ game := g } st))
 applyPotion PotionHallucination st =
   let (turns, rng') = roll 1 50 st.game.rng
       p' = addStatus Hallucinating (turns + 20) st.game.player
       g : Game
       g = { rng := rng' } st.game
-  in say ItemMsg "Oh wow! Everything looks strange."
+  in say ItemMsg EverythingStrange
        (setPlayer p' ({ game := g } st))
 applyPotion PotionBlindness st =
   let (turns, rng') = roll 1 8 st.game.rng
       p' = addStatus Blinded (turns + 4) st.game.player
       g : Game
       g = { rng := rng' } st.game
-  in say WarningMsg "You are blinded." (setPlayer p' ({ game := g } st))
+  in say WarningMsg Blinded (setPlayer p' ({ game := g } st))
 applyPotion PotionDetectMonsters st =
   let (turns, rng') = roll 1 8 st.game.rng
       p' = addStatus DetectMonsters (turns + 4) st.game.player
       g : Game
       g = { rng := rng' } st.game
-  in say ItemMsg "You sense the presence of monsters."
+  in say ItemMsg SenseMonsters
        (setPlayer p' ({ game := g } st))
 applyPotion PotionMagicDetection st =
   let (turns, rng') = roll 1 8 st.game.rng
@@ -971,27 +959,27 @@ applyPotion PotionMagicDetection st =
                                          l.explored magicCells } l) g0
       g : Game
       g = { rng := rng', player := p' } g1
-  in say ItemMsg "You sense the presence of magic."
+  in say ItemMsg SenseMagic
        ({ game := g } st)
 applyPotion PotionHasteSelf st =
   let (turns, rng') = roll 1 8 st.game.rng
       p' = addStatus Hasted (turns + 4) st.game.player
       g : Game
       g = { rng := rng' } st.game
-  in say ItemMsg "You feel yourself moving faster."
+  in say ItemMsg MovingFaster
        (setPlayer p' ({ game := g } st))
 applyPotion PotionSeeInvisible st =
   let (turns, rng') = roll 1 8 st.game.rng
       p' = addStatus SeeInvisible (turns + 4) st.game.player
       g : Game
       g = { rng := rng' } st.game
-  in say ItemMsg "Your eyes feel strange." (setPlayer p' ({ game := g } st))
+  in say ItemMsg EyesStrange (setPlayer p' ({ game := g } st))
 applyPotion PotionLevitation st =
   let (turns, rng') = roll 1 20 st.game.rng
       p' = addStatus Levitated (turns + 10) st.game.player
       g : Game
       g = { rng := rng' } st.game
-  in say ItemMsg "You float gently into the air."
+  in say ItemMsg Float
        (setPlayer p' ({ game := g } st))
 applyPotion PotionRaiseLevel st =
   let p = st.game.player
@@ -999,27 +987,27 @@ applyPotion PotionRaiseLevel st =
       er = gainExperience p amount st.game.rng
       g : Game
       g = { player := er.player, rng := er.rng } st.game
-      st1 = say ItemMsg "You feel more experienced." ({ game := g } st)
+      st1 = say ItemMsg MoreExperienced ({ game := g } st)
   in addLevelUpMessages er st1
 
 quaff : ItemId -> Step -> Step
 quaff iid st =
   case findPackItem st.game iid of
-    Nothing => say WarningMsg "You do not have that item." st
+    Nothing => say WarningMsg NoSuchItem st
     Just it =>
       case it.kind of
         Potion k =>
           let shown = itemDisplayNameIn st.game it
               g1 = addKnown (Potion k) (removePackItem iid st.game)
-              st1 = say ItemMsg ("You quaff the " ++ shown ++ ".")
+              st1 = say ItemMsg (QuaffItem shown)
                             ({ game := g1 } st)
           in consume (applyPotion k st1)
-        _ => say WarningMsg "You cannot quaff that." st
+        _ => say WarningMsg CannotQuaff st
 
 eat : ItemId -> Step -> Step
 eat iid st =
   case findPackItem st.game iid of
-    Nothing => say WarningMsg "You do not have that item." st
+    Nothing => say WarningMsg NoSuchItem st
     Just it =>
       case it.kind of
         Food FoodRation =>
@@ -1029,10 +1017,9 @@ eat iid st =
               g1 : Game
               g1 = { player := p } g0
           in event (ItemUsed iid)
-               (consume (say ItemMsg
-                 "You eat the food ration. You feel satisfied."
+               (consume (say ItemMsg EatRation
                  ({ game := g1 } st)))
-        _ => say WarningMsg "You cannot eat that." st
+        _ => say WarningMsg CannotEat st
 
 equipRingAt : Bool -> Item -> Step -> Step
 equipRingAt left it st =
@@ -1051,27 +1038,27 @@ equipRingAt left it st =
                     (\l => { monsters := map (\m => { state := Chasing } m)
                                                 l.monsters } l) g1
              else g1
-      text = if it.cursed
-                then "The ring tightens around your finger!"
-                else "You put on the " ++ itemDisplayNameIn g it ++ "."
+      message = if it.cursed
+                   then RingTightens
+                   else PutOnRing (itemDisplayNameIn g it)
   in event (ItemUsed it.id)
-       (consume (say ItemMsg text ({ game := g } st)))
+       (consume (say ItemMsg message ({ game := g } st)))
 
 putOnRing : ItemId -> Step -> Step
 putOnRing iid st =
   case findPackItem st.game iid of
-    Nothing => say WarningMsg "You do not have that item." st
+    Nothing => say WarningMsg NoSuchItem st
     Just it =>
       case it.kind of
         Ring _ =>
           let p = st.game.player
           in if p.leftRing == Just iid || p.rightRing == Just iid
-                then say SystemMsg "You are already wearing that ring." st
+                then say SystemMsg AlreadyWearingRing st
                 else case (p.leftRing, p.rightRing) of
                        (Nothing, _) => equipRingAt True it st
                        (_, Nothing) => equipRingAt False it st
-                       _ => say WarningMsg "Your fingers are already full." st
-        _ => say WarningMsg "You cannot put that on." st
+                       _ => say WarningMsg FingersFull st
+        _ => say WarningMsg CannotPutOn st
 
 isPotionKind : ItemKind -> Bool
 isPotionKind (Potion _) = True
@@ -1098,25 +1085,25 @@ identifyMessage : String -> (Game, Maybe Item) -> Step -> Step
 identifyMessage what (g, found) st =
   case found of
     Just it => say ItemMsg
-      ("You identify the " ++ itemDisplayNameIn g it ++ ".")
+      (IdentifyItem (itemDisplayNameIn g it))
       ({ game := g } st)
-    Nothing => say WarningMsg ("You have no unidentified " ++ what ++ ".") st
+    Nothing => say WarningMsg (NoUnidentified what) st
 
 applyScroll : ScrollKind -> Step -> Step
 applyScroll ScrollConfuseMonster st =
   let p : Player
       p = addStatus ConfuseNext 50 st.game.player
-  in say ItemMsg "Your hands begin to glow red."
+  in say ItemMsg HandsGlowRed
        ({ game := { player := p } st.game } st)
 applyScroll ScrollMagicMapping st =
-  say ItemMsg "A map of the level forms in your mind."
+  say ItemMsg MapForms
     ({ game := revealMap st.game } st)
 applyScroll ScrollHoldMonster st =
   let g : Game
       g = updateCurrentLevel
             (\l => { monsters := map (addMonsterStatus Held 10) l.monsters } l)
             st.game
-  in say ItemMsg "The monsters freeze in place." ({ game := g } st)
+  in say ItemMsg MonstersFreeze ({ game := g } st)
 applyScroll ScrollSleep st =
   let g : Game
       g = updateCurrentLevel
@@ -1124,13 +1111,13 @@ applyScroll ScrollSleep st =
                        (\m => { state := Asleep }
                                 (addMonsterStatus Sleeping 20 m)) l.monsters } l)
             st.game
-  in say ItemMsg "The monsters fall asleep." ({ game := g } st)
+  in say ItemMsg MonstersSleep ({ game := g } st)
 applyScroll ScrollEnchantArmor st =
   case st.game.player.worn of
-    Nothing => say WarningMsg "You are not wearing armor." st
+    Nothing => say WarningMsg NotWearingArmor st
     Just iid =>
       case findPackItem st.game iid of
-        Nothing => say WarningMsg "You are not wearing armor." st
+        Nothing => say WarningMsg NotWearingArmor st
         Just it =>
           let g1 : Game
               g1 = updateItem iid
@@ -1139,7 +1126,7 @@ applyScroll ScrollEnchantArmor st =
               g2 : Game
               g2 = recomputeArmor g1
           in say ItemMsg
-               ("Your " ++ itemDisplayNameIn g2 it ++ " glows silver.")
+               (ArmorGlowsSilver (itemDisplayNameIn g2 it))
                ({ game := g2 } st)
 applyScroll ScrollIdentifyPotion st =
   identifyMessage "potions" (identifyFirst isPotionKind st.game) st
@@ -1159,19 +1146,19 @@ applyScroll ScrollScareMonster st =
                        (\m => { state := Fleeing }
                                 (addMonsterStatus Scared 12 m)) l.monsters } l)
             st.game
-  in say ItemMsg "The monsters turn to flee." ({ game := g } st)
+  in say ItemMsg MonstersFlee ({ game := g } st)
 applyScroll ScrollFoodDetection st =
   let p : Player
       p = addStatus DetectFood 30 st.game.player
-  in say ItemMsg "You sense food nearby." ({ game := { player := p } st.game } st)
+  in say ItemMsg SenseFood ({ game := { player := p } st.game } st)
 applyScroll ScrollTeleportation st =
-  teleportPlayer (say ItemMsg "You feel disoriented." st)
+  teleportPlayer (say ItemMsg (Teleported st.game.player.pos) st)
 applyScroll ScrollEnchantWeapon st =
   case st.game.player.wielded of
-    Nothing => say WarningMsg "You are not wielding a weapon." st
+    Nothing => say WarningMsg NotWieldingWeapon st
     Just iid =>
       case findPackItem st.game iid of
-        Nothing => say WarningMsg "You are not wielding a weapon." st
+        Nothing => say WarningMsg NotWieldingWeapon st
         Just it =>
           let g1 : Game
               g1 = updateItem iid
@@ -1180,7 +1167,7 @@ applyScroll ScrollEnchantWeapon st =
               g2 : Game
               g2 = recomputeWeapon g1
           in say ItemMsg
-               ("Your " ++ itemDisplayNameIn g2 it ++ " glows blue.")
+               (WeaponGlowsBlue (itemDisplayNameIn g2 it))
                ({ game := g2 } st)
 applyScroll ScrollCreateMonster st = createMonsterNear st
 applyScroll ScrollRemoveCurse st =
@@ -1188,45 +1175,45 @@ applyScroll ScrollRemoveCurse st =
       g = { items := map (\i => if i.location == InPack
                                    then { cursed := False } i else i)
                          st.game.items } st.game
-  in say ItemMsg "You feel a surge of relief." ({ game := g } st)
+  in say ItemMsg SurgeOfRelief ({ game := g } st)
 applyScroll ScrollAggravateMonsters st =
   let g : Game
       g = updateCurrentLevel
             (\l => { monsters := map (\m => { state := Chasing } m) l.monsters } l)
             st.game
-  in say WarningMsg "You hear a growl from every direction."
+  in say WarningMsg GrowlEverywhere
        ({ game := g } st)
 applyScroll ScrollProtectArmor st =
   case st.game.player.worn of
-    Nothing => say WarningMsg "You are not wearing armor." st
+    Nothing => say WarningMsg NotWearingArmor st
     Just iid =>
       case findPackItem st.game iid of
-        Nothing => say WarningMsg "You are not wearing armor." st
+        Nothing => say WarningMsg NotWearingArmor st
         Just it =>
           let g : Game
               g = updateItem iid (\i => { protected := True } i) st.game
           in say ItemMsg
-               ("Your " ++ itemDisplayNameIn g it ++ " feels protected.")
+               (ArmorFeelsProtected (itemDisplayNameIn g it))
                ({ game := g } st)
 
 read : ItemId -> Step -> Step
 read iid st =
   case findPackItem st.game iid of
-    Nothing => say WarningMsg "You do not have that item." st
+    Nothing => say WarningMsg NoSuchItem st
     Just it =>
       case it.kind of
         Scroll k =>
           let shown = itemDisplayNameIn st.game it
               g1 = addKnown (Scroll k) (removePackItem iid st.game)
-              st1 = say ItemMsg ("You read the " ++ shown ++ ".")
+              st1 = say ItemMsg (ReadScroll shown)
                             ({ game := g1 } st)
           in consume (applyScroll k st1)
-        _ => say WarningMsg "You cannot read that." st
+        _ => say WarningMsg CannotRead st
 
-zapDamage : Int32 -> Int32 -> String -> Dir -> Step -> Step
+zapDamage : Int32 -> Int32 -> AttackLead -> Dir -> Step -> Step
 zapDamage n sides lead dir st =
   case beamTarget st.game dir of
-    Nothing => say WarningMsg "The beam fizzles." st
+    Nothing => say WarningMsg BeamFizzles st
     Just (_, m) =>
       let (dmg, rng') = roll n sides st.game.rng
           g : Game
@@ -1235,27 +1222,27 @@ zapDamage n sides lead dir st =
 
 applyWand : WandKind -> Dir -> Step -> Step
 applyWand WandLight dir st =
-  say ItemMsg "The wand floods the level with light."
+  say ItemMsg WandFloodsLight
     ({ game := revealMap st.game } st)
 applyWand WandInvisibility dir st =
   let p : Player
       p = addStatus Invisible 20 st.game.player
-  in say ItemMsg "You fade out of sight." ({ game := { player := p } st.game } st)
+  in say ItemMsg FadeOutOfSight ({ game := { player := p } st.game } st)
 applyWand WandLightning dir st =
-  zapDamage 6 6 "Lightning arcs through the air!" dir st
+  zapDamage 6 6 WandLightning dir st
 applyWand WandFire dir st =
-  zapDamage 6 6 "A bolt of fire roars out!" dir st
+  zapDamage 6 6 WandFire dir st
 applyWand WandCold dir st =
-  zapDamage 6 6 "A cone of cold blasts out!" dir st
+  zapDamage 6 6 WandCold dir st
 applyWand WandMagicMissile dir st =
-  zapDamage 1 4 "Magic missiles streak away!" dir st
+  zapDamage 1 4 WandMagicMissile dir st
 applyWand WandPolymorph dir st =
   case beamTarget st.game dir of
-    Nothing => say WarningMsg "The beam fizzles." st
+    Nothing => say WarningMsg BeamFizzles st
     Just (_, m) =>
       let (kindOpt, rng1) = pick (spawnPool st.game.depth) st.game.rng
       in case kindOpt of
-           Nothing => say WarningMsg "The beam fizzles." st
+           Nothing => say WarningMsg BeamFizzles st
            Just kind =>
              let spec = monsterSpec kind
                  (hp, rng2) = rollMonsterHp spec rng1
@@ -1268,34 +1255,33 @@ applyWand WandPolymorph dir st =
                  g = { rng := rng2 }
                        (updateCurrentLevel (const lvl') st.game)
              in say ItemMsg
-                  ("The " ++ monsterName m.kind ++ " becomes a "
-                   ++ monsterName kind ++ "!")
+                  (MonsterPolymorphs m.kind kind)
                   ({ game := g } st)
 applyWand WandHasteMonster dir st =
   case beamTarget st.game dir of
-    Nothing => say WarningMsg "The beam fizzles." st
+    Nothing => say WarningMsg BeamFizzles st
     Just (_, m) =>
       let lvl = currentLevel st.game
           lvl' : Level
           lvl' = updateMonster m.id (addMonsterStatus Hasted 20) lvl
           g : Game
           g = updateCurrentLevel (const lvl') st.game
-      in say ItemMsg ("The " ++ monsterName m.kind ++ " speeds up!")
+      in say ItemMsg (MonsterSpeedsUp m.kind)
            ({ game := g } st)
 applyWand WandSlowMonster dir st =
   case beamTarget st.game dir of
-    Nothing => say WarningMsg "The beam fizzles." st
+    Nothing => say WarningMsg BeamFizzles st
     Just (_, m) =>
       let lvl = currentLevel st.game
           lvl' : Level
           lvl' = updateMonster m.id (addMonsterStatus Slowed 20) lvl
           g : Game
           g = updateCurrentLevel (const lvl') st.game
-      in say ItemMsg ("The " ++ monsterName m.kind ++ " slows down.")
+      in say ItemMsg (MonsterSlowsDown m.kind)
            ({ game := g } st)
 applyWand WandDrainLife dir st =
   case beamTarget st.game dir of
-    Nothing => say WarningMsg "The beam fizzles." st
+    Nothing => say WarningMsg BeamFizzles st
     Just (_, m) =>
       let (dmg, rng') = roll 2 6 st.game.rng
           p = st.game.player
@@ -1303,18 +1289,18 @@ applyWand WandDrainLife dir st =
           p' = { hp := min p.maxHp (p.hp + dmg) } p
           g : Game
           g = { rng := rng', player := p' } st.game
-      in damageMonster m dmg "The wand drains life!" ({ game := g } st)
+      in damageMonster m dmg DrainLife ({ game := g } st)
 applyWand WandNothing dir st =
-  say ItemMsg "Nothing happens." st
+  say ItemMsg NothingHappens st
 applyWand WandTeleportAway dir st =
   case beamTarget st.game dir of
-    Nothing => say WarningMsg "The beam fizzles." st
+    Nothing => say WarningMsg BeamFizzles st
     Just (_, m) => teleportMonster m st
 applyWand WandTeleportTo dir st =
-  teleportPlayer (say ItemMsg "You feel disoriented." st)
+  teleportPlayer (say ItemMsg (Teleported st.game.player.pos) st)
 applyWand WandCancellation dir st =
   case beamTarget st.game dir of
-    Nothing => say WarningMsg "The beam fizzles." st
+    Nothing => say WarningMsg BeamFizzles st
     Just (_, m) =>
       let lvl = currentLevel st.game
           lvl' : Level
@@ -1322,26 +1308,26 @@ applyWand WandCancellation dir st =
                    (\mm => { statuses := [], state := Chasing } mm) lvl
           g : Game
           g = updateCurrentLevel (const lvl') st.game
-      in say ItemMsg ("The " ++ monsterName m.kind ++ " looks ordinary again.")
+      in say ItemMsg (MonsterOrdinary m.kind)
            ({ game := g } st)
 
 zap : ItemId -> Dir -> Step -> Step
 zap iid dir st =
   case findPackItem st.game iid of
-    Nothing => say WarningMsg "You do not have that item." st
+    Nothing => say WarningMsg NoSuchItem st
     Just it =>
       case it.kind of
         Wand k =>
           if it.charges <= 0
-             then say WarningMsg "The wand sputters." st
+             then say WarningMsg WandSputters st
              else let shown = itemDisplayNameIn st.game it
                       g1 : Game
                       g1 = updateItem iid (\i => { charges := i.charges - 1 } i)
                              (addKnown (Wand k) st.game)
-                      st1 = say ItemMsg ("You zap the " ++ shown ++ ".")
+                      st1 = say ItemMsg (ZapWand shown)
                                     ({ game := g1 } st)
                   in consume (applyWand k dir st1)
-        _ => say WarningMsg "You cannot zap that." st
+        _ => say WarningMsg CannotZap st
 
 throwPath : Game -> Dir -> List Coord
 throwPath g d = go 1
@@ -1386,13 +1372,13 @@ throwDamage p it g =
 throwItem : ItemId -> Dir -> Step -> Step
 throwItem iid dir st =
   case findPackItem st.game iid of
-    Nothing => say WarningMsg "You do not have that item." st
+    Nothing => say WarningMsg NoSuchItem st
     Just it =>
       let p = st.game.player
           equipped = p.wielded == Just iid || p.worn == Just iid
                      || p.leftRing == Just iid || p.rightRing == Just iid
       in if equipped
-            then say WarningMsg "Take it off before throwing it." st
+            then say WarningMsg TakeOffBeforeThrowing st
             else let (landing, targetM) =
                        throwLanding st.game (throwPath st.game dir)
                      isPotion = case it.kind of
@@ -1411,10 +1397,9 @@ throwItem iid dir st =
                      p' = { inventory := filter (/= iid) p.inventory } p
                      g0 : Game
                      g0 = { items := items', player := p' } st.game
-                     text = "You throw the " ++ itemDisplayNameIn st.game it
-                            ++ (if isPotion then ". It shatters." else ".")
+                     message = ThrowItem (itemDisplayNameIn st.game it) isPotion
                      base = event (ItemDropped iid)
-                              (say ItemMsg text ({ game := g0 } st))
+                              (say ItemMsg message ({ game := g0 } st))
                  in case targetM of
                       Nothing => consume base
                       Just m =>
@@ -1422,7 +1407,7 @@ throwItem iid dir st =
                             g1 : Game
                             g1 = { rng := rng' } g0
                         in consume (damageMonster m dmg
-                                      "The thrown item hits!" ({ game := g1 } base))
+                                      ThrownItem ({ game := g1 } base))
 
 equipWeapon : Item -> Step -> Step
 equipWeapon it st =
@@ -1430,33 +1415,31 @@ equipWeapon it st =
       g0 = { player := { wielded := Just it.id } st.game.player } st.game
       g : Game
       g = addKnown it.kind (recomputeWeapon g0)
-      text = if it.cursed
-                then "You feel the " ++ itemName it.kind
-                     ++ " weld itself to your hand!"
-                else "You wield the " ++ itemDisplayNameIn g it ++ "."
+      message = if it.cursed
+                   then WeaponWeldsToHand (itemName it.kind)
+                   else WieldItem (itemDisplayNameIn g it)
   in event (ItemUsed it.id)
-       (consume (say ItemMsg text ({ game := g } st)))
+       (consume (say ItemMsg message ({ game := g } st)))
 
 wield : ItemId -> Step -> Step
 wield iid st =
   case findPackItem st.game iid of
-    Nothing => say WarningMsg "You do not have that item." st
+    Nothing => say WarningMsg NoSuchItem st
     Just it =>
       case it.kind of
         Weapon _ =>
           if st.game.player.wielded == Just iid
-             then say SystemMsg "You are already wielding that." st
+             then say SystemMsg AlreadyWielding st
              else case st.game.player.wielded of
                     Just old =>
                       case findPackItem st.game old of
                         Just oldItem =>
                           if oldItem.cursed
-                             then say WarningMsg
-                                    "Your weapon is welded to your hand!" st
+                             then say WarningMsg WeaponWelded st
                              else equipWeapon it st
                         Nothing => equipWeapon it st
                     Nothing => equipWeapon it st
-        _ => say WarningMsg "You cannot wield that." st
+        _ => say WarningMsg CannotWield st
 
 equipArmor : Item -> Step -> Step
 equipArmor it st =
@@ -1464,33 +1447,31 @@ equipArmor it st =
       g0 = { player := { worn := Just it.id } st.game.player } st.game
       g : Game
       g = addKnown it.kind (recomputeArmor g0)
-      text = if it.cursed
-                then "You feel the " ++ itemName it.kind
-                     ++ " tighten around you!"
-                else "You wear the " ++ itemDisplayNameIn g it ++ "."
+      message = if it.cursed
+                   then ArmorTightens (itemName it.kind)
+                   else WearArmor (itemDisplayNameIn g it)
   in event (ItemUsed it.id)
-       (consume (say ItemMsg text ({ game := g } st)))
+       (consume (say ItemMsg message ({ game := g } st)))
 
 wear : ItemId -> Step -> Step
 wear iid st =
   case findPackItem st.game iid of
-    Nothing => say WarningMsg "You do not have that item." st
+    Nothing => say WarningMsg NoSuchItem st
     Just it =>
       case it.kind of
         Armor _ =>
           if st.game.player.worn == Just iid
-             then say SystemMsg "You are already wearing that." st
+             then say SystemMsg AlreadyWearingArmor st
              else case st.game.player.worn of
                     Just old =>
                       case findPackItem st.game old of
                         Just oldItem =>
                           if oldItem.cursed
-                             then say WarningMsg
-                                    "You cannot remove the cursed armor!" st
+                             then say WarningMsg CannotRemoveCursedArmor st
                              else equipArmor it st
                         Nothing => equipArmor it st
                     Nothing => equipArmor it st
-        _ => say WarningMsg "You cannot wear that." st
+        _ => say WarningMsg CannotWear st
 
 takeOff : ItemId -> Step -> Step
 takeOff iid st =
@@ -1499,26 +1480,24 @@ takeOff iid st =
       isRing = p.leftRing == Just iid || p.rightRing == Just iid
   in if p.worn == Just iid
         then case findPackItem g iid of
-               Nothing => say WarningMsg "You are not wearing that." st
+               Nothing => say WarningMsg NotWearingThat st
                Just it =>
                  if it.cursed
-                    then say WarningMsg "You cannot remove the cursed armor!" st
+                    then say WarningMsg CannotRemoveCursedArmor st
                     else let p' : Player
                              p' = { worn := Nothing } p
                              g1 : Game
                              g1 = recomputeArmor ({ player := p' } g)
                          in event (ItemUsed iid)
                               (consume (say ItemMsg
-                                ("You take off the "
-                                 ++ itemDisplayNameIn g1 it ++ ".")
+                                (TakeOffItem (itemDisplayNameIn g1 it))
                                 ({ game := g1 } st)))
         else if isRing
                 then case findPackItem g iid of
-                       Nothing => say WarningMsg "You are not wearing that." st
+                       Nothing => say WarningMsg NotWearingThat st
                        Just it =>
                          if it.cursed
-                            then say WarningMsg
-                                   "You cannot remove the cursed ring!" st
+                            then say WarningMsg CannotRemoveCursedRing st
                             else let p' : Player
                                      p' = { leftRing :=
                                               if p.leftRing == Just iid
@@ -1531,21 +1510,20 @@ takeOff iid st =
                                      g1 = recomputeRings ({ player := p' } g)
                                  in event (ItemUsed iid)
                                       (consume (say ItemMsg
-                                        ("You take off the "
-                                         ++ itemDisplayNameIn g1 it ++ ".")
+                                        (TakeOffItem (itemDisplayNameIn g1 it))
                                         ({ game := g1 } st)))
-                else say WarningMsg "You are not wearing that." st
+                else say WarningMsg NotWearingThat st
 
 dropItem : ItemId -> Step -> Step
 dropItem iid st =
   case findPackItem st.game iid of
-    Nothing => say WarningMsg "You do not have that item." st
+    Nothing => say WarningMsg NoSuchItem st
     Just it =>
       let p0 = st.game.player
           equipped = p0.wielded == Just iid || p0.worn == Just iid
                      || p0.leftRing == Just iid || p0.rightRing == Just iid
       in if equipped && it.cursed
-            then say WarningMsg "You cannot let go of the cursed item!" st
+            then say WarningMsg CannotLetGoCursed st
             else let p1 : Player
                      p1 = if p0.wielded == Just iid
                              then { wielded := Nothing } p0
@@ -1573,7 +1551,7 @@ dropItem iid st =
                      g = { player := p2, items := items' } g1
                  in event (ItemDropped iid)
                       (consume (say ItemMsg
-                        ("You drop the " ++ itemDisplayNameIn g it ++ ".")
+                        (DropItem (itemDisplayNameIn g it))
                         ({ game := g } st)))
 
 playerAction : Command -> Step -> Step
@@ -1634,11 +1612,10 @@ stealGold m st =
       g1 = { rng := rng', player := p' } g
   in if stolen <= 0
         then say CombatMsg
-               ("The " ++ monsterName m.kind ++ " finds no gold to steal.")
+               (MonsterFindsNoGold m.kind)
                ({ game := g1 } st)
         else say WarningMsg
-               ("The " ++ monsterName m.kind ++ " snatches "
-                ++ show stolen ++ " gold and vanishes!")
+               (MonsterSnatchesGold m.kind stolen)
                (teleportMonster m ({ game := g1 } st))
 
 stealItem : Monster -> Step -> Step
@@ -1655,8 +1632,7 @@ stealItem m st =
       rng' = snd picked
   in case choice of
        Nothing => say CombatMsg
-                    ("The " ++ monsterName m.kind
-                     ++ " finds nothing to steal.")
+                    (MonsterFindsNothing m.kind)
                     st
        Just it =>
          let p' : Player
@@ -1668,8 +1644,7 @@ stealItem m st =
              g1 : Game
              g1 = { rng := rng', player := p', items := items' } g
          in say WarningMsg
-              ("The " ++ monsterName m.kind ++ " snatches your "
-               ++ itemDisplayNameIn g it ++ " and vanishes!")
+              (MonsterSnatchesItem m.kind (itemDisplayNameIn g it))
               (teleportMonster m ({ game := g1 } st))
 
 ||| Apply the on-hit special ability of a monster.  Only one offensive
@@ -1681,11 +1656,11 @@ monsterAbilityOnHit m st =
      then st
      else if hasAbility Freeze m.kind
              then say WarningMsg
-                    ("The " ++ monsterName m.kind ++ " freezes you!")
+                    (MonsterFreezesYou m.kind)
                     (setPlayer (addStatus Held 3 st.game.player) st)
      else if hasAbility HoldingAttack m.kind
              then say WarningMsg
-                    ("The " ++ monsterName m.kind ++ " holds you fast!")
+                    (MonsterHoldsYou m.kind)
                     (setPlayer (addStatus Held 3 st.game.player) st)
      else if hasAbility DrainLife m.kind
              then let (amount, rng') = roll 1 5 st.game.rng
@@ -1696,21 +1671,18 @@ monsterAbilityOnHit m st =
                       g : Game
                       g = { rng := rng', player := p' } st.game
                   in say WarningMsg
-                       ("The " ++ monsterName m.kind
-                        ++ " drains " ++ show amount ++ " maximum HP!")
+                       (MonsterDrainsMaxHp m.kind amount)
                        ({ game := g } st)
      else if hasAbility DrainStrength m.kind
              then if hasRing RingSustainStrength st.game
                      then say WarningMsg
-                            ("The " ++ monsterName m.kind
-                             ++ " tries to weaken you, but your strength holds.")
+                            (MonsterTriesWeaken m.kind)
                             st
                      else let p = st.game.player
                               p' : Player
                               p' = { strength := max 0 (p.strength - 1) } p
                           in say WarningMsg
-                               ("The " ++ monsterName m.kind
-                                ++ " weakens you!")
+                               (MonsterWeakensYou m.kind)
                                (setPlayer p' st)
      else if hasAbility DrainExperience m.kind
              then let p = st.game.player
@@ -1723,13 +1695,10 @@ monsterAbilityOnHit m st =
                            , hp := min p.hp newMax
                            } p
                   in say WarningMsg
-                       ("The " ++ monsterName m.kind
-                        ++ " drains your life force!")
+                       (MonsterDrainsLifeForce m.kind)
                        (setPlayer p' st)
      else if hasAbility RustArmor m.kind
-             then rustPlayerArmor
-                    ("The " ++ monsterName m.kind ++ " corrodes your armor.")
-                    st
+             then rustPlayerArmor (RustMonster m.kind) st
      else if hasAbility StealGold m.kind
              then stealGold m st
      else if hasAbility StealItem m.kind
@@ -1738,7 +1707,7 @@ monsterAbilityOnHit m st =
 
 ||| Apply ranged damage from a monster.  Used by arrows and by the
 ||| dragon's fire breath.
-applyRangedHit : String -> Monster -> Int32 -> Game -> Step -> Step
+applyRangedHit : AttackLead -> Monster -> Int32 -> Game -> Step -> Step
 applyRangedHit lead m dmg g1 st =
   let hp' = g1.player.hp - dmg
   in if hp' <= 0
@@ -1750,7 +1719,7 @@ applyRangedHit lead m dmg g1 st =
                      } g1
             in event PlayerDied
                  (say WarningMsg
-                   ("You die... Killed by a " ++ monsterName m.kind ++ ".")
+                   (Die True (KilledBy m.kind))
                    ({ game := g2 } st))
        else let player' : Player
                 player' = { hp := hp' } g1.player
@@ -1758,7 +1727,7 @@ applyRangedHit lead m dmg g1 st =
                 g2 = { player := player' } g1
             in event (MonsterAttacked m.id dmg)
                  (say CombatMsg
-                   (lead ++ " You take " ++ show dmg ++ " damage.")
+                   (RangedHit lead dmg)
                    ({ game := g2 } st))
 
 rangedStrike : Monster -> Step -> Step
@@ -1769,15 +1738,15 @@ rangedStrike m st =
                 g1 : Game
                 g1 = { rng := rng' } g
             in applyRangedHit
-                 ("The " ++ monsterName m.kind ++ " breathes fire!")
+                 (BreathFire m.kind)
                  m dmg g1 st
        else let (result, rng') = monsterAttack g.player m g.rng
                 g1 : Game
                 g1 = { rng := rng' } g
-                lead = "The " ++ monsterName m.kind ++ " fires an arrow!"
+                lead = ArrowFire m.kind
             in case result of
                  Miss =>
-                   say CombatMsg (lead ++ " You dodge it.")
+                   say CombatMsg (RangedMiss lead)
                        ({ game := g1 } st)
                  Hit dmg => applyRangedHit lead m dmg g1 st
                  Killed dmg => applyRangedHit lead m dmg g1 st
@@ -1790,7 +1759,7 @@ monsterStrike m st =
       g1 = { rng := rng' } g
   in case result of
        Miss =>
-         say CombatMsg ("The " ++ monsterName m.kind ++ " misses.")
+         say CombatMsg (MonsterMisses m.kind)
              ({ game := g1 } st)
        Hit dmg =>
          let hp' = g1.player.hp - dmg
@@ -1801,8 +1770,7 @@ monsterStrike m st =
          in event (MonsterAttacked m.id dmg)
               (monsterAbilityOnHit m
                 (say CombatMsg
-                  ("The " ++ monsterName m.kind ++ " hits you for "
-                   ++ show dmg ++ ".")
+                  (MonsterHitsYou m.kind dmg)
                   ({ game := g2 } st)))
        Killed dmg =>
          let player' : Player
@@ -1813,7 +1781,7 @@ monsterStrike m st =
                   } g1
          in event PlayerDied
               (say WarningMsg
-                ("You die... Killed by a " ++ monsterName m.kind ++ ".")
+                (Die True (KilledBy m.kind))
                 ({ game := g2 } st))
 
 neighborCells : Coord -> List Coord
@@ -1836,7 +1804,7 @@ moveMonsterTo m target st =
       st1 : Step
       st1 = if opened
                then say SystemMsg
-                      ("The " ++ monsterName m.kind ++ " opens the door.")
+                      (MonsterOpensDoor m.kind)
                       ({ game := g' } st)
                else { game := g' } st
   in event (MonsterMoved m.id target) st1
@@ -1940,7 +1908,7 @@ monsterAct m st =
                              g' = updateCurrentLevel (const lvl') st.game
                          in event (MonsterWoke m.id)
                               (say CombatMsg
-                                ("The " ++ monsterName m.kind ++ " wakes up.")
+                                (MonsterWakesUp m.kind)
                                 ({ game := g' } st))
                     else st
             Fleeing =>
@@ -2046,7 +2014,7 @@ survivalTurn st =
              g2 : Game
              g2 = { player := p, over := Just (Dead cause) } g1
          in event PlayerDied
-              (say WarningMsg ("You die... " ++ show cause ++ ".")
+              (say WarningMsg (Die False cause)
                 ({ game := g2 } st1))
        Nothing =>
          let p0 = g1.player
@@ -2080,7 +2048,7 @@ survivalTurn st =
              st2 = { game := g3 } st1
          in if teleport
                then teleportPlayer
-                      (say ItemMsg "The ring hums, and the world shifts." st2)
+                      (say ItemMsg RingHums st2)
                else st2
 
 isMoveCommand : Command -> Bool
@@ -2136,8 +2104,8 @@ step cmd g =
           st1 = if incapacitated
                    then consume (say WarningMsg
                           (if hasStatus Sleeping g.player
-                              then "You are asleep."
-                              else "You are paralyzed.") st0)
+                              then YouAreAsleep
+                              else YouAreParalyzed) st0)
                    else playerAction cmd st0
           changed = st1.game.depth /= g.depth
           moved = st1.game.player.pos /= g.player.pos || changed

@@ -301,15 +301,34 @@ messageToJSON m =
   JObject
     [ ("turn", jsonInt m.turn)
     , ("kind", JString (messageKindText m.kind))
+    , ("key", JString m.key)
+    , ("args", JArray (map JString m.args))
     , ("text", JString m.text)
     ]
 
+||| `key` and `args` are optional so saves written before the message
+||| catalog still load.  Those messages keep `key = ""` and always render
+||| their stored English `text`.
 messageFromJSON : JSON -> Maybe Message
 messageFromJSON j = do
   turn <- field "turn" j >>= asInt32
   kind <- field "kind" j >>= asString >>= messageKindFromText
   text <- field "text" j >>= asString
-  pure (MkMessage turn kind text)
+  key <- optionalString "key" j
+  args <- optionalStrings "args" j
+  pure (MkMessage turn kind key args text)
+  where
+    optionalString : String -> JSON -> Maybe String
+    optionalString name obj =
+      case field name obj of
+        Nothing => Just ""
+        Just (JString value) => Just value
+        Just _ => Nothing
+    optionalStrings : String -> JSON -> Maybe (List String)
+    optionalStrings name obj =
+      case field name obj of
+        Nothing => Just []
+        Just value => arrayOf asString value
 
 -- Validation ---------------------------------------------------------------
 

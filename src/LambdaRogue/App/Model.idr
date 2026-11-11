@@ -1,6 +1,7 @@
 ||| The app model shared by update, view and subscriptions.
 module LambdaRogue.App.Model
 
+import public LambdaRogue.App.Catalog
 import public LambdaRogue.App.Keymap
 import LambdaRogue.Core.Game
 import LambdaRogue.Core.Item
@@ -77,6 +78,7 @@ data Msg
   | CycleLogFilter
   | CycleLogFilterBack
   | CycleTheme
+  | SwitchLanguage
   | OpenScores
   | CloseScores
   | OpenShare
@@ -92,7 +94,7 @@ data Msg
   | SaveAndQuit
   | LoadGame
   | LoadedSave (Maybe SaveFile)
-  | ApplySettings Theme Bool Keymap
+  | ApplySettings Theme Bool Keymap Language
   | StartReplay
   | ReplayTick
   | ReplayToggle
@@ -202,6 +204,7 @@ paletteEntries =
   , MkPaletteEntry "Share seed" "Ctrl-S" OpenShare (Just Share)
   , MkPaletteEntry "Cycle theme" "F3" CycleTheme (Just Theme)
   , MkPaletteEntry "Toggle animation" "F4" ToggleAnimations (Just Animation)
+  , MkPaletteEntry "Switch language" "ja" SwitchLanguage Nothing
   , MkPaletteEntry "Save settings" "" SaveSettings Nothing
   , MkPaletteEntry "Reload settings" "" ReloadSettings Nothing
   , MkPaletteEntry "Save and quit" "" SaveAndQuit Nothing
@@ -221,6 +224,21 @@ paletteEntriesFor km = map refresh paletteEntries
       case entry.command of
         Nothing => entry
         Just cid => { hint := formatPrimary km cid } entry
+
+||| Palette labels are presentation only; the English label remains the
+||| stable identity used by the settings and tests.
+public export
+paletteEntriesForLang : Language -> Keymap -> List PaletteEntry
+paletteEntriesForLang lang km =
+  map localize (paletteEntriesFor km)
+  where
+    localize : PaletteEntry -> PaletteEntry
+    localize entry =
+      let translated = { label := paletteLabel lang entry.label } entry
+      in case entry.action of
+           SwitchLanguage => { hint := languageId (nextLanguage lang) }
+                               translated
+           _ => translated
 
 public export
 paletteEntryAtIn : Keymap -> Nat -> Maybe PaletteEntry
@@ -336,13 +354,14 @@ record Model where
   animationsEnabled : Bool
   playback : Maybe Playback
   keymap : Keymap
+  language : Language
 
 public export
 initModel : Canvas -> Game -> Model
 initModel c g = MkModel c g 80 24 False Nothing Nothing Nothing
                        False False 0 AllMessages (emptyReplay g.seed)
                        [] False False Nothing ClassicCga Nothing [] True Nothing
-                       defaultKeymap
+                       defaultKeymap English
 
 ||| True while one of the modal screens owns the keyboard and the map.
 public export

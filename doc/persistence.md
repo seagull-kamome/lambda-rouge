@@ -1,9 +1,9 @@
 # lambda-rogue 永続化・リプレイ設計
 
-- Status: Draft 0.8（M5 スライス 1 の `Search` コマンドを反映）
-- Date: 2026-11-09
+- Status: Draft 0.9（M5 スライス 2 の言語設定とメッセージ `key` / `args` を反映）
+- Date: 2026-11-10
 - 対象: `LambdaRogue.Persist.*`, `LambdaRogue.Core.Replay`
-- 前提: `doc/design.md` Draft 1.8, `doc/core-api.md` Draft 1.6
+- 前提: `doc/design.md` Draft 1.11, `doc/core-api.md` Draft 1.8
 
 ## 1. 方針
 
@@ -42,7 +42,7 @@ $XDG_DATA_HOME/lambda-rogue/       # なければ ~/.local/share/lambda-rogue/
 - 起動時は `session.lock` を取得してから、`save.json`、なければ
   `autosave.json` の順に探す。読み込んだファイルはその場で削除し、
   二重復元を防ぐ。復旧確認のダイアログはなく、自動で再開する。
-- `settings.json` はテーマ、アニメーション、キーバインドだけを持つ。
+- `settings.json` はテーマ、アニメーション、言語、キーバインドを持つ。
   セーブ/リプレイの再現性には影響しない。
 - 戦績とリプレイはゲーム終了時に `App.Update.persistRun` が書き込む。
   戦績は起動時に `Main` が読み込む。リプレイの一覧・選択 UI は未実装。
@@ -56,6 +56,7 @@ $XDG_DATA_HOME/lambda-rogue/       # なければ ~/.local/share/lambda-rogue/
   "schema": "lambda-rogue.settings.v1",
   "theme": "classic-cga",
   "animation": true,
+  "language": "en",
   "keys": {
     "move-north": ["k", "Up"],
     "inventory": ["i"],
@@ -69,6 +70,9 @@ $XDG_DATA_HOME/lambda-rogue/       # なければ ~/.local/share/lambda-rogue/
 - `theme` は `classic-cga`, `modern-dark`, `amber`, `green-phosphor`,
   `high-contrast`, `colorblind-safe` の安定 ID。省略時は `classic-cga`。
 - `animation` は Boolean。省略時は `true`。
+- `language` は `en` または `ja`。省略時は `en`。未知の ID は `en` に
+  フォールバックする。`--lang en|ja` はこの値をその起動だけ上書きする。
+  言語は表示専用で、`Game`, `Replay`, `gameDigest` には入らない。
 - `keys` はコマンド ID をキーとする object。値は 1 つのコード文字列または
   配列。空配列は「未割り当て」を意味する。
 - コマンド ID は `move-north`, `move-south`, `pick-up`, `put-on-ring`,
@@ -170,7 +174,13 @@ $XDG_DATA_HOME/lambda-rogue/       # なければ ~/.local/share/lambda-rogue/
       { "kind": "potion of healing", "name": "murky potion" }
     ],
     "messages": [
-      { "turn": 1240, "kind": "combat", "text": "You hit the kobold." }
+      {
+        "turn": 1240,
+        "kind": "combat",
+        "key": "hit-monster",
+        "args": ["kobold", "4", "no"],
+        "text": "You hit the kobold for 4 damage."
+      }
     ],
     "over": null,
     "visible": "0000000000000000..."
@@ -319,8 +329,14 @@ $XDG_DATA_HOME/lambda-rogue/       # なければ ~/.local/share/lambda-rogue/
 ```
 
 - `kind`: `combat`, `item`, `system`, `warning`, `story`。
+- `key` と `args` は M5 スライス 2 で追加した安定したメッセージ識別子と
+  引数。`key` は `damage`, `hit-monster`, `descend-level` などの文字列で、
+  `args` は同じ順序の文字列配列。英語の `text` は常に保存する。
+- `key` / `args` のない旧セーブは `key = ""`, `args = []` として読み込み、
+  保存済みの英語 `text` をそのまま表示する。未知の `key` も同じ経路で
+  `text` にフォールバックする。
 - 最大 200 件。`Game.messages` は新しいものが先頭なので、ファイル上も新しい順。
-- メッセージは `gameDigest` の対象外。
+- メッセージは `gameDigest` の対象外。`text` は言語切替の影響を受けない。
 
 ## 4. リプレイスキーマ `lambda-rogue.replay.v1`
 
@@ -360,6 +376,8 @@ $XDG_DATA_HOME/lambda-rogue/       # なければ ~/.local/share/lambda-rogue/
 - `ItemId` は整数の JSON 数値。現在の ID は小さく、読み込み側は
   整数として正確に表せる 32-bit 値だけを受け付ける。
 - キー入力ではなく `Command` を記録する。キーバインド変更でリプレイが壊れない。
+- 表示言語はリプレイに保存しない。`--lang` や `settings.json` を変えても
+  コマンド列と `gameDigest` は同じで、再生時のログ表示だけが変わる。
 - UI のモーダル、ログスクロール、ヘルプ閲覧は記録しない。
 - 不成立だったコマンドも記録する。警告メッセージの再現に必要。
 - 未知の `type`、必須フィールドの欠落、不正な方向、文字列の item ID は
@@ -481,12 +499,14 @@ seedHex : Bits64 -> String
     `{"kind":"monster","monster":"dragon"}`、`{"kind":"trap","trap":"bear"}`、
     `{"kind":"starved"}`、`{"kind":"drained"}`、
     `{"kind":"other","text":"..."}` のいずれか。
+- 死因は `result.cause` に保存し、スコア画面の `Cause` / `死因` 列に表示する。
+  勝利の行は死因を持たないため、その列は空になる。
 - 書き込みは `appendScoreAt`（`appendFile`）。`fsync` とロックは未実装。
   同時書き込みは単一プロセス前提とする。
 - 空行・空白だけの行・JSON として壊れた行・スキーマ不一致の行はスキップする。
   ファイル全体を失わない。警告 UI はまだない。
-- `Score` は seed、深度、レベル、経験値、金、ターン、結果だけを持つ。
-  名前、殺害数、プレイ日時、ゲームバージョンはまだ保存しない。
+- `Score` は seed、深度、レベル、経験値、金、ターン、結果（勝利/死亡と
+  死因）を持つ。名前、殺害数、プレイ日時、ゲームバージョンはまだ保存しない。
 - スコア画面は `App.Model.scores` の新しい順に最大 8 件を表示する。
   並び替え UI は未実装。
 - 起動時に `Main` が `loadScores` を呼ぶ。ゲーム終了時は

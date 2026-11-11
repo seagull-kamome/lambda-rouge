@@ -45,7 +45,7 @@ redraw m =
            >> pure Painted)
 
 settingsOf : Model -> Settings
-settingsOf m = MkSettings m.theme m.animationsEnabled m.keymap
+settingsOf m = MkSettings m.theme m.animationsEnabled m.keymap m.language
 
 saveSettingsCmd : Model -> Cmd Msg
 saveSettingsCmd m =
@@ -266,6 +266,10 @@ update CycleTheme m =
   let m' : Model
       m' = { theme := nextTheme m.theme } m
   in (m', Batch [redraw m', saveSettingsCmd m'])
+update SwitchLanguage m =
+  let m' : Model
+      m' = { language := nextLanguage m.language } m
+  in (m', Batch [redraw m', saveSettingsCmd m'])
 update ToggleAnimations m =
   let enabled = not m.animationsEnabled
       m' : Model
@@ -275,11 +279,11 @@ update ToggleAnimations m =
 update SaveSettings m = (m, saveSettingsCmd m)
 update ReloadSettings m =
   (m, Perform (do s <- loadSettings
-                  pure (ApplySettings s.theme s.animationsEnabled s.keymap)))
-update (ApplySettings theme animations keymap) m =
+                  pure (ApplySettings s.theme s.animationsEnabled s.keymap s.language)))
+update (ApplySettings theme animations keymap language) m =
   let m' : Model
       m' = { theme := theme, animationsEnabled := animations,
-             keymap := keymap,
+             keymap := keymap, language := language,
              animations := if animations then m.animations else [] } m
   in (m', redraw m')
 update SaveAndQuit m =

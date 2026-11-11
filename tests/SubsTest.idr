@@ -153,7 +153,7 @@ run = do
       g : Game
       g = { player := p, items := [potion] } sampleGame
       m : Model
-      m = MkModel c g 80 24 True Nothing Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap
+      m = MkModel c g 80 24 True Nothing Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English
 
   check "a selects the first pack item"
     (isSelect 2 (key m (Press (KChar 'a') noMods)))
@@ -212,7 +212,7 @@ run = do
       gWand = { player := { inventory := [3] } sampleGame.player
               , items := [wandItem] } sampleGame
       mWand : Model
-      mWand = MkModel c gWand 80 24 True (Just 3) Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap
+      mWand = MkModel c gWand 80 24 True (Just 3) Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English
   check "Enter zaps a selected wand"
     (isAction ZapAction (key mWand (Press KEnter noMods)))
 
@@ -311,8 +311,8 @@ run = do
     (isScores (key mNormal (Press (KChar 'S') noMods)))
   check "Ctrl-S opens seed sharing"
     (isShare (key mNormal (Press (KChar 's') (MkMods False True False))))
-  check "the palette has 25 entries"
-    (paletteCount == 25)
+  check "the palette has 26 entries"
+    (paletteCount == 26)
   check "the palette includes Scores"
     (case paletteEntryAt 15 of
        Just e => e.label == "Scores"
@@ -333,33 +333,38 @@ run = do
        Just e => e.label == "Toggle animation"
                   && (case e.action of ToggleAnimations => True; _ => False)
        Nothing => False)
-  check "the palette includes Save settings"
+  check "the palette includes Switch language"
     (case paletteEntryAt 19 of
+       Just e => e.label == "Switch language"
+                  && (case e.action of SwitchLanguage => True; _ => False)
+       Nothing => False)
+  check "the palette includes Save settings"
+    (case paletteEntryAt 20 of
        Just e => e.label == "Save settings"
                   && (case e.action of SaveSettings => True; _ => False)
        Nothing => False)
   check "the palette includes Reload settings"
-    (case paletteEntryAt 20 of
+    (case paletteEntryAt 21 of
        Just e => e.label == "Reload settings"
                   && (case e.action of ReloadSettings => True; _ => False)
        Nothing => False)
   check "the palette includes Save and quit"
-    (case paletteEntryAt 21 of
+    (case paletteEntryAt 22 of
        Just e => e.label == "Save and quit"
                   && (case e.action of SaveAndQuit => True; _ => False)
        Nothing => False)
   check "the palette includes Load game"
-    (case paletteEntryAt 22 of
+    (case paletteEntryAt 23 of
        Just e => e.label == "Load game"
                   && (case e.action of LoadGame => True; _ => False)
        Nothing => False)
   check "the palette includes Search for traps"
-    (case paletteEntryAt 23 of
+    (case paletteEntryAt 24 of
        Just e => e.label == "Search for traps"
                   && (case e.action of Do Search => True; _ => False)
        Nothing => False)
   check "the palette includes Quit"
-    (case paletteEntryAt 24 of
+    (case paletteEntryAt 25 of
        Just e => e.label == "Quit"
                   && (case e.action of Quit' => True; _ => False)
        Nothing => False)
@@ -416,7 +421,7 @@ run = do
       gDying = { player := pDying } gStarve
       mDying = MkModel c gDying 80 24 False Nothing Nothing Nothing
                  False False 0 AllMessages (emptyReplay 42)
-                 [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap
+                 [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English
       deadOut = update (Do Wait) mDying
       mDead = fst deadOut
   check "game over auto-opens the score screen"

@@ -13,6 +13,7 @@ import LambdaRogue.Core.Bitset
 import LambdaRogue.Core.Fov
 import LambdaRogue.Core.Geometry
 import LambdaRogue.Core.Item
+import LambdaRogue.Core.Message
 import LambdaRogue.Core.Monster
 import LambdaRogue.Core.Rng
 import LambdaRogue.Core.Types
@@ -291,8 +292,7 @@ sampleGameWithSeed seed =
       items = [newItem 1 (Food FoodRation) (OnFloor 1 (MkCoord 7 5))]
       visible = compute lvl0.tiles lvl0.rooms player.pos
       lvl1 = { explored := visible } lvl0
-      welcome = MkMessage 0 StoryMsg
-        "Welcome to lambda-rogue. hjkl/yubn move, . wait, , pick up, > descend, i inventory, q quit."
+      welcome = mkMessage 0 StoryMsg Welcome
   in MkGame seed (fromSeed seed) 0 1 player [lvl1] items 2 2 [] []
              [welcome] Nothing visible
 
@@ -311,8 +311,7 @@ newGame seed =
       player = initialPlayer start
       visible = compute gen.level.tiles gen.level.rooms start
       lvl = { explored := visible } gen.level
-      welcome = MkMessage 0 StoryMsg
-        "Welcome to lambda-rogue. hjkl/yubn move, . wait, , pick up, i inventory, > descend, q quit."
+      welcome = mkMessage 0 StoryMsg Welcome
   in MkGame seed rng' 0 1 player [lvl] gen.items
              gen.nextMonsterId gen.nextItemId [] appearances
              [welcome] Nothing visible

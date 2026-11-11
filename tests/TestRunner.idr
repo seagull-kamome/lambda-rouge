@@ -5,6 +5,7 @@
 module TestRunner
 
 import AnimationTest
+import CatalogTest
 import CombatTest
 import CoreTest
 import DungeonTest
@@ -33,6 +34,7 @@ main = do
   CoreTest.run
   DungeonTest.run
   AnimationTest.run
+  CatalogTest.run
   CombatTest.run
   FuzzTest.run
   M3Test.run

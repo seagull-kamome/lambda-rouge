@@ -116,6 +116,7 @@ run = do
       baseSettings =
         MkSettings ModernDark False
           (setBindingKeys Help [MkKeyChord (KF 9) noMods] defaultKeymap)
+          English
   check "settings text round-trips"
     (case settingsFromText (settingsToText baseSettings) of
        Just s => s == baseSettings
@@ -123,9 +124,30 @@ run = do
   check "settings output names the schema"
     (isInfixOf (unpack "lambda-rogue.settings.v1")
                (unpack (settingsToText baseSettings)))
+  check "settings output stores the language id"
+    (isInfixOf (unpack "\"language\": \"en\"")
+               (unpack (settingsToText baseSettings)))
   check "missing optional fields keep defaults"
     (settingsFromText "{\"schema\":\"lambda-rogue.settings.v1\"}"
        == Just defaultSettings)
+  check "missing language defaults to English"
+    (case settingsFromText "{\"schema\":\"lambda-rogue.settings.v1\"}" of
+       Just s => s.language == English
+       Nothing => False)
+  check "a Japanese language setting round-trips"
+    (case settingsFromText
+            "{\"schema\":\"lambda-rogue.settings.v1\",\"language\":\"ja\"}" of
+       Just s => s.language == Japanese
+                 && settingsFromText (settingsToText s) == Just s
+       Nothing => False)
+  check "an unknown language id falls back to English"
+    (case settingsFromText
+            "{\"schema\":\"lambda-rogue.settings.v1\",\"language\":\"de\"}" of
+       Just s => s.language == English
+       Nothing => False)
+  check "a non-string language rejects the settings file"
+    (isNothing (settingsFromText
+      "{\"schema\":\"lambda-rogue.settings.v1\",\"language\":42}"))
   check "an unknown command id is ignored"
     (case settingsFromText
             "{\"schema\":\"lambda-rogue.settings.v1\",\"keys\":{\"teleport\":[\"T\"],\"help\":[\"F9\"]}}" of
@@ -191,7 +213,8 @@ run = do
   let applied = fst (update
         (ApplySettings baseSettings.theme
                        baseSettings.animationsEnabled
-                       baseSettings.keymap) m0)
+                       baseSettings.keymap
+                       baseSettings.language) m0)
   check "applying settings changes only presentation state"
     (applied.theme == ModernDark
      && not applied.animationsEnabled
@@ -199,6 +222,22 @@ run = do
   check "applying settings keeps the game and replay"
     (gameDigest applied.game == gameDigest m0.game
      && applied.replay.commands == m0.replay.commands)
+
+  let appliedJa = fst (update
+        (ApplySettings baseSettings.theme
+                       baseSettings.animationsEnabled
+                       baseSettings.keymap
+                       Japanese) m0)
+  check "applying Japanese changes only the display language"
+    (appliedJa.language == Japanese
+     && appliedJa.game.turn == m0.game.turn
+     && appliedJa.game.player.pos == m0.game.player.pos
+     && appliedJa.replay.commands == m0.replay.commands)
+  check "Japanese settings keep the game digest and replay commands"
+    (gameDigest appliedJa.game == gameDigest m0.game
+     && appliedJa.replay.commands == m0.replay.commands)
+  check "the English and Japanese models share the same game state"
+    (gameDigest applied.game == gameDigest appliedJa.game)
   check "Save settings returns a file action"
     (case snd (update SaveSettings m0) of
        Perform _ => True

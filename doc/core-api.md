@@ -1,9 +1,9 @@
 # lambda-rogue Core API 設計
 
-- Status: Draft 1.7（M5 スライス 1 の探索・回復・魔法の矢を反映）
-- Date: 2026-11-09
+- Status: Draft 1.8（M5 スライス 2 のメッセージカタログを反映）
+- Date: 2026-11-10
 - 対象: `LambdaRogue.Core.*` と `LambdaRogue.UI.*`、`LambdaRogue.Persist.*`
-- 前提: `doc/design.md` Draft 1.8
+- 前提: `doc/design.md` Draft 1.11
 
 ## 1. 境界
 
@@ -350,13 +350,38 @@ record Game where
 public export
 data MessageKind = CombatMsg | ItemMsg | SystemMsg | WarningMsg | StoryMsg
 
+||| 型付きの意味メッセージ。Core は表示言語を選ばない。
+public export
+data Msg
+  = TakeDamage Int32
+  | KillMonster AttackLead MonsterKind
+  | ...
+
 public export
 record Message where
   constructor MkMessage
   turn : Turn
   kind : MessageKind
-  text : String
+  key : String          -- 安定キー。旧セーブは ""
+  args : List String    -- key と同じ順序の安定引数
+  text : String         -- 正規の英語文。常にフォールバックに使う
 
+public export
+mkMessage : Turn -> MessageKind -> Msg -> Message
+
+public export
+legacyMessage : Turn -> MessageKind -> String -> Message
+```
+
+- `Core.Message` は `Msg` の全構築子に対して `msgEn`, `msgKey`, `msgArgs` を持つ。
+  `mkMessage` はこの 3 つから `Message` を作る。
+- `key` と `args` はセーブに保存する安定表現で、`text` は M5 以前と同じ英語文。
+  `legacyMessage` は `key = ""` のメッセージを作り、常に `text` を表示する。
+- 表示言語の選択は `App.Catalog` の `renderMessage` が行う。Core は
+  `Language` もロケールも知らない。したがって言語切替は `gameDigest`、
+  RNG、ターン、リプレイに影響しない。
+
+```idris
 public export
 data Event
   = PlayerMoved Coord
@@ -2185,7 +2210,7 @@ releaseSessionLock : IO ()
   壊れたファイル、欠損ファイル。
 - セッションロックの取得、生存 PID の拒否、解放、死んだ PID と
   壊れたファイルの再利用。
-- `verify.sh` はクリーンビルド、814 件のテスト、PTY スモークを実行する。
+- `verify.sh` はクリーンビルド、897 件のテスト、PTY スモークを実行する。
 
 ### 28.7 既知の制約
 
@@ -2411,3 +2436,58 @@ data Command
 - `tests/SettingsTest.idr`、`tests/SubsTest.idr`、`tests/ViewTest.idr` に
   `s` キー、パレット 25 項目、ヘルプの search 表示を追加した。
 - 全体は 795 チェックから 814 チェックへ増えた。
+
+## 31. M5 スライス 2 実装ノート（2026-11-10、メッセージカタログ）
+
+### 31.1 Core のメッセージ
+
+- ゲームログの文字列生成を `Core.Game` から `Core.Message.Msg` に移した。
+  `Core.Game` は `mkMessage turn kind msg` だけを呼び、英語文を直接組み立てない。
+- `Msg` は型付きの引数を持ち、`msgKey` は `damage`, `kill-monster`,
+  `descend-level` などの安定キー、`msgArgs` は表示用の文字列引数を返す。
+- `Message` は `turn`, `kind`, `key`, `args`, `text` を持つ。`text` は
+  M5 以前と同一の正規英語文で、旧セーブ・未知キーのフォールバックになる。
+- `msgEn` の出力はカタログ導入前の文字列と一致させ、既存テストと
+  セーブの可読性を保つ。
+- `sampleMessages` は全構築子の代表値を並べたテスト・文書用の一覧である。
+
+### 31.2 App のカタログ
+
+- `Language = English | Japanese`、既定は `English`。`languageId` は
+  `en` / `ja`。
+- `renderMessage : Language -> Message -> String` は英語では常に `text`、
+  日本語では `key` に対応するテンプレートへ `args` を順に埋める。
+  `key = ""` または未知キーは `text` を返す。
+- `TextKey` と `uiText` / `uiTextArgs` はヘルプ、パレット、ステータス、
+  プロンプト、戦績、共有、端末・起動エラーの文言を同じ方式で描画する。
+- `allTextKeys` は UI キーの全一覧で、`CatalogTest` が英語・日本語の
+  非空性と件数を検証する。
+- パレットの英語ラベルは設定・テスト用の正規識別子として残し、
+  `paletteEntriesForLang` が表示時だけ日本語ラベルへ置き換える。
+
+### 31.3 言語の選択と不変条件
+
+- `settings.json` の `language` は既定 `en`。未知の ID は `en` に落とす。
+- `--lang en|ja` はその起動だけ設定を上書きし、不明値・欠落はエラーにする。
+  エラー文も `--lang` で選ばれた言語で表示する。
+- 言語は `Model.language` にだけ存在し、`Game`, `Replay`, `Command`,
+  `gameDigest`, セーブのゲーム部分には入らない。
+- 旧セーブの `key` / `args` 欠落は空として読み込み、`text` を表示する。
+  リプレイは言語を持たないため、`--lang` を変えても同じコマンド列で再生できる。
+
+### 31.4 テスト
+
+- `CatalogTest`（32 チェック）: メッセージキーの重複、全構築子の日本語
+  テンプレート網羅、英語 `msgEn` との一致、引数順、旧メッセージ・未知キーの
+  フォールバック、UI キーの網羅、パレットラベルの翻訳、パレットの言語切替、
+  言語切替後の `gameDigest` とリプレイ不変。
+- `SettingsTest`: `language` の JSON 往復、欠落時の英語、未知 ID の英語
+  フォールバック、非文字列の拒否、`ApplySettings` 後の状態不変。
+- `StartupTest`: `--lang en|ja`、`--seed` との併用、欠落・不正値、
+  日本語エラー文。
+- `PersistTest`: メッセージ `key` / `args` の往復、旧セーブの英語
+  フォールバック、不正な `args` の拒否。
+- `ViewTest`: 日本語のヘルプ、パレット、スコア、共有、持ち物、ログ、
+  ステータス、ホバー、端末警告の実描画。スコアの死因列と、英語・日本語で
+  同じ端末セル幅になる列幅も検証する。
+- 全体は 814 チェックから 897 チェックへ増えた。

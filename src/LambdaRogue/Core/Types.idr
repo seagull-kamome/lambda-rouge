@@ -1147,11 +1147,18 @@ Show MessageKind where
   show WarningMsg = "Warning"
   show StoryMsg = "Story"
 
+||| One entry in the game log.
+|||
+||| `key` and `args` are the stable, language-neutral form introduced in
+||| M5 slice 2.  `text` remains the canonical English sentence and is also
+||| the fallback for old saves that have no key.
 public export
 record Message where
   constructor MkMessage
   turn : Turn
   kind : MessageKind
+  key : String
+  args : List String
   text : String
 
 public export

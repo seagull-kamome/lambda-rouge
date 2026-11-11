@@ -13,6 +13,7 @@ import LambdaRogue.Core.Dungeon
 import LambdaRogue.Core.Game
 import LambdaRogue.Core.Geometry
 import LambdaRogue.Core.Item
+import LambdaRogue.Core.Message
 import LambdaRogue.Core.Rng
 import LambdaRogue.Core.Survival
 import LambdaRogue.Core.Types
@@ -213,19 +214,19 @@ foodTests = do
 
   let rHungry = tickSurvival ({ hunger := hungryAt + 1 } base.player)
   check "crossing the hunger threshold warns"
-    (elem "You are hungry." rHungry.messages)
+    (any (\m => msgKey m == "hungry") rHungry.messages)
   check "hunger decreases by one per turn"
     (rHungry.player.hunger == hungryAt)
 
   let rWeak = tickSurvival ({ hunger := weakAt + 1 } base.player)
   check "crossing the weak threshold warns"
-    (elem "You are weak." rWeak.messages)
+    (any (\m => msgKey m == "weak-from-hunger") rWeak.messages)
   check "weakness alone does not damage the player"
     (rWeak.player.hp == base.player.hp)
 
   let rFaint = tickSurvival ({ hunger := starvingAt + 1 } base.player)
   check "starvation starts with a faint warning"
-    (elem "You faint from lack of food." rFaint.messages)
+    (any (\m => msgKey m == "faint-from-hunger") rFaint.messages)
   check "starvation damages the player"
     (rFaint.player.hp == base.player.hp - 1)
 
@@ -241,7 +242,7 @@ foodTests = do
     (rPoison1.player.hp == 9 && rPoison2.player.hp == 8)
   check "poison expires after its timer"
     (not (hasStatus Poisoned rPoison2.player)
-     && elem "The poison wears off." rPoison2.messages)
+     && any (\m => msgKey m == "status-expires") rPoison2.messages)
 
 
 equipmentTests : IO ()

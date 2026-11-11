@@ -4,6 +4,7 @@ module LambdaRogue.App.View
 import Data.List
 import Data.Maybe
 import Data.String
+import LambdaRogue.App.Catalog
 import LambdaRogue.App.Keymap
 import LambdaRogue.App.Model
 import LambdaRogue.Core.Bitset
@@ -23,6 +24,7 @@ import LambdaRogue.Version
 import TermUI.Len
 import TermUI.Node
 import TermUI.Style
+import TermUI.Width
 
 %default covering
 
@@ -30,11 +32,59 @@ import TermUI.Style
 styled : Model -> StyleRole -> Style
 styled m role = styleFor m.theme role
 
+t : Model -> TextKey -> String
+t m key = uiText m.language key
+
+tf : Model -> TextKey -> List String -> String
+tf m key args = uiTextArgs m.language key args
+
+logFilterText : Model -> String
+logFilterText m =
+  case m.logFilter of
+    AllMessages => t m LogAll
+    CombatMessages => t m LogCombat
+    ItemMessages => t m LogItems
+    SystemMessages => t m LogSystem
+    WarningMessages => t m LogWarnings
+
+speedText : Model -> PlaybackSpeed -> String
+speedText m SlowPlayback = t m ReplaySlow
+speedText m NormalPlayback = t m ReplayNormal
+speedText m FastPlayback = t m ReplayFast
+
 borderColorOf : Model -> Color
 borderColorOf m = (styled m BorderRole).fg
 
 line : Style -> String -> Node Msg
 line s t = box [height (Cells 1)] [truncated s t]
+
+||| Pad with spaces up to a terminal column width.  `String.length` counts
+||| characters, but Japanese glyphs occupy two cells, so aligned columns
+||| must use the same width table as termui's renderer.
+padWidth : Len -> String -> String
+padWidth target s =
+  s ++ pack (replicate
+               (integerToNat (cast (monus target (stringWidth s)))) ' ')
+
+||| Cut a string to a terminal column width without splitting a wide glyph.
+fitWidth : Len -> String -> String
+fitWidth target s = pack (go target (unpack s))
+  where
+    go : Len -> List Char -> List Char
+    go _ [] = []
+    go room (c :: cs) =
+      let w = charWidth c
+      in if w > room then [] else c :: go (monus room w) cs
+
+||| One fixed-width table cell.  Padding and cutting are display-aware, so
+||| English and Japanese rows line up in the same columns.
+cell : Len -> String -> String
+cell width value = padWidth width (fitWidth width value)
+
+joinCells : List Len -> List String -> String
+joinCells [] _ = ""
+joinCells _ [] = ""
+joinCells (w :: ws) (v :: vs) = cell w v ++ joinCells ws vs
 
 hpBar : Player -> String
 hpBar p =
@@ -42,47 +92,51 @@ hpBar p =
       filled = min 10 (integerToNat (cast (max 0 raw)))
   in "[" ++ pack (replicate filled '#') ++ pack (replicate (10 `minus` filled) '-') ++ "]"
 
-gameOverText : Game -> String
-gameOverText g =
+gameOverText : Model -> Game -> String
+gameOverText m g =
   case g.over of
     Nothing => ""
-    Just (Dead cause) => "  DEAD: " ++ show cause
-    Just Won => "  WON"
+    Just (Dead cause) =>
+      tf m Dead [deathName m.language cause]
+    Just Won => t m Won
 
 classicStatus : Model -> String
 classicStatus m =
   let p = m.game.player
-  in "Dlvl " ++ show m.game.depth
-     ++ "  Lv " ++ show p.level
-     ++ "  HP " ++ show p.hp ++ "/" ++ show p.maxHp
-     ++ "  Str " ++ show (effectiveStrength p)
-     ++ "  Gold " ++ show p.gold
-     ++ "  Exp " ++ show p.exp ++ "/" ++ show (expForNext p.level)
-     ++ "  Turn " ++ show m.game.turn
-     ++ "  Food " ++ show (hungerState p.hunger)
-     ++ gameOverText m.game
+  in t m LabelDlvl ++ " " ++ show m.game.depth
+     ++ "  " ++ t m LabelLevel ++ " " ++ show p.level
+     ++ "  " ++ t m LabelHp ++ " " ++ show p.hp ++ "/" ++ show p.maxHp
+     ++ "  " ++ t m LabelStrength ++ " " ++ show (effectiveStrength p)
+     ++ "  " ++ t m LabelGold ++ " " ++ show p.gold
+     ++ "  " ++ t m LabelExp ++ " " ++ show p.exp
+                        ++ "/" ++ show (expForNext p.level)
+     ++ "  " ++ t m LabelTurn ++ " " ++ show m.game.turn
+     ++ "  " ++ t m LabelFood ++ " "
+                        ++ hungerName m.language (hungerState p.hunger)
+     ++ gameOverText m m.game
 
-playbackText : Playback -> String
-playbackText pb =
-  "REPLAY " ++ show pb.played ++ "/" ++ show pb.commandCount
-  ++ "  " ++ show pb.speed
-  ++ (if pb.done then "  complete"
-      else if pb.playing then "  playing" else "  paused")
-  ++ "  " ++ (if pb.verified then "verified" else "MISMATCH")
-  ++ "   Space . -/+ R Esc"
+playbackText : Model -> Playback -> String
+playbackText m pb =
+  tf m ReplayBar [show pb.played, show pb.commandCount]
+  ++ "  " ++ speedText m pb.speed
+  ++ (if pb.done then "  " ++ t m ReplayComplete
+      else if pb.playing then "  " ++ t m ReplayPlaying
+      else "  " ++ t m ReplayPaused)
+  ++ "  " ++ (if pb.verified then t m ReplayVerified else t m ReplayMismatch)
+  ++ "   " ++ t m ReplayControls
 
 header : Model -> String
 header m =
   case m.playback of
-    Just pb => playbackText pb
+    Just pb => playbackText m pb
     Nothing =>
-      "lambda-rogue " ++ version
-      ++ "   Depth " ++ show m.game.depth
-      ++ "   Level " ++ show m.game.player.level
-      ++ "   Turn " ++ show m.game.turn
-      ++ "   Log " ++ show m.logFilter
-      ++ "   Theme " ++ show m.theme
-      ++ "   Seed " ++ seedHex m.game.seed
+      t m Brand ++ " " ++ version
+      ++ "   " ++ t m LabelDepth ++ " " ++ show m.game.depth
+      ++ "   " ++ t m LabelLevel ++ " " ++ show m.game.player.level
+      ++ "   " ++ t m LabelTurn ++ " " ++ show m.game.turn
+      ++ "   " ++ t m LabelLog ++ " " ++ logFilterText m
+      ++ "   " ++ t m LabelTheme ++ " " ++ show m.theme
+      ++ "   " ++ t m LabelSeed ++ " " ++ seedHex m.game.seed
 
 floorItem : Game -> Maybe Item
 floorItem g =
@@ -92,42 +146,46 @@ floorItem g =
                 CarriedBy _ => False)
        g.items
 
-monsterLine : Game -> String
-monsterLine g =
+monsterLine : Model -> String
+monsterLine m =
+  let g = m.game
+  in
   let ms = filter (\m => not (hasAbility Invisible m.kind)
                          || playerSeesInvisible g
                          || adjacent m.pos g.player.pos)
                   (currentLevel g).monsters
   in case ms of
-       [] => "Monsters: none"
-       (mo :: _) => "Monsters: " ++ show (length ms)
-                    ++ "  " ++ monsterName mo.kind
-                    ++ " (" ++ show mo.state ++ ") " ++ show mo.pos
+       [] => t m MonstersNone
+       (mo :: _) => tf m MonsterSummary
+                    [show (length ms), monsterName mo.kind,
+                     monsterStateName m.language mo.state, show mo.pos]
 
-itemLine : Game -> String
-itemLine g =
-  case floorItem g of
-    Nothing => "Item: none"
-    Just i => case i.location of
-                OnFloor _ p => "Item: " ++ itemDisplayNameIn g i
-                               ++ " " ++ show p
-                InPack => "Item: " ++ itemDisplayNameIn g i ++ " (pack)"
-                CarriedBy _ => "Item: " ++ itemDisplayNameIn g i
-                               ++ " (carried)"
+itemLine : Model -> String
+itemLine m =
+  let g = m.game
+  in case floorItem g of
+       Nothing => t m ItemNone
+       Just i => case i.location of
+                   OnFloor _ p => tf m ItemFloor
+                                    [itemDisplayNameIn g i, show p]
+                   InPack => tf m ItemPack [itemDisplayNameIn g i]
+                   CarriedBy _ => tf m ItemCarried [itemDisplayNameIn g i]
 
-equippedName : Game -> Maybe ItemId -> String
-equippedName g Nothing = "none"
-equippedName g (Just iid) =
+equippedName : Model -> Game -> Maybe ItemId -> String
+equippedName m g Nothing = t m EquippedNone
+equippedName m g (Just iid) =
   case findPackItem g iid of
     Just i => itemDisplayNameIn g i
     Nothing => "?"
 
-statusLine : Player -> String
-statusLine p =
+statusLine : Model -> Player -> String
+statusLine m p =
   if null p.statuses
-     then "Status: none"
-     else "Status: " ++ concat (intersperse ", "
-            (map (\s => show s.statusKind ++ "(" ++ show s.remaining ++ ")")
+     then t m StatusNone
+     else t m LabelStatus ++ ": "
+          ++ concat (intersperse ", "
+            (map (\s => statusName m.language s.statusKind
+                        ++ "(" ++ show s.remaining ++ ")")
                  p.statuses))
 
 sidebarLines : Model -> List (Node Msg)
@@ -141,49 +199,54 @@ sidebarLines m =
       overLine : List (Node Msg)
       overLine = case g.over of
                    Nothing => []
-                   Just _ => [line (styled m DangerRole) (gameOverText g)]
-  in [ line title "Status"
-     , line body ("HP " ++ show p.hp ++ "/" ++ show p.maxHp ++ "  " ++ hpBar p)
-     , line body ("Lv " ++ show p.level ++ "  Exp " ++ show p.exp
+                   Just _ => [line (styled m DangerRole) (gameOverText m g)]
+  in [ line title (t m LabelStatus)
+     , line body (t m LabelHp ++ " " ++ show p.hp ++ "/" ++ show p.maxHp
+                  ++ "  " ++ hpBar p)
+     , line body (t m LabelLevel ++ " " ++ show p.level
+                  ++ "  " ++ t m LabelExp ++ " " ++ show p.exp
                   ++ "/" ++ show (expForNext p.level))
-     , line body ("Str " ++ show (effectiveStrength p) ++ "/" ++ show p.maxStrength
-                  ++ "   Gold " ++ show p.gold)
-     , line body ("Food " ++ show (hungerState p.hunger))
-     , line body ("Depth " ++ show g.depth ++ "   Turn " ++ show g.turn)
-     , line body ("Pos " ++ show p.pos)
-     , line body ("Seed " ++ seedHex g.seed)
+     , line body (t m LabelStrength ++ " " ++ show (effectiveStrength p)
+                  ++ "/" ++ show p.maxStrength
+                  ++ "   " ++ t m LabelGold ++ " " ++ show p.gold)
+     , line body (t m LabelFood ++ " "
+                  ++ hungerName m.language (hungerState p.hunger))
+     , line body (t m LabelDepth ++ " " ++ show g.depth
+                  ++ "   " ++ t m LabelTurn ++ " " ++ show g.turn)
+     , line body (t m LabelPos ++ " " ++ show p.pos)
+     , line body (t m LabelSeed ++ " " ++ seedHex g.seed)
      , line dim "------------"
-     , line body ("Weapon: " ++ equippedName g p.wielded)
-     , line body ("Armor: " ++ equippedName g p.worn)
-     , line body ("Rings: " ++ equippedName g p.leftRing ++ " / "
-                  ++ equippedName g p.rightRing)
-     , line body (statusLine p)
+     , line body (t m LabelWeapon ++ ": " ++ equippedName m g p.wielded)
+     , line body (t m LabelArmor ++ ": " ++ equippedName m g p.worn)
+     , line body (t m LabelRings ++ ": " ++ equippedName m g p.leftRing
+                  ++ " / " ++ equippedName m g p.rightRing)
+     , line body (statusLine m p)
      , line dim "------------"
-     , line body ("Visible " ++ show (count g.visible)
-                  ++ "   Explored " ++ show (count lvl.explored))
-     , line body ("Rooms " ++ show (length lvl.rooms)
-                  ++ "   Traps " ++ show (length lvl.traps))
+     , line body (t m LabelVisible ++ " " ++ show (count g.visible)
+                  ++ "   " ++ t m LabelExplored ++ " "
+                  ++ show (count lvl.explored))
+     , line body (t m LabelRooms ++ " " ++ show (length lvl.rooms)
+                  ++ "   " ++ t m LabelTraps ++ " "
+                  ++ show (length lvl.traps))
      , line dim "------------"
-     , line body (monsterLine g)
-     , line body (itemLine g)
+     , line body (monsterLine m)
+     , line body (itemLine m)
      , line dim "------------"
-     , line title "Keys"
-     , line dim "hjkl/yubn move   . wait   i inventory"
-     , line dim ", pick up   > descend   < ascend"
-     , line dim "r read   z zap   t throw   P put on ring"
-     , line dim "R take off   ^R redraw   q quit"
-     , line dim "? help  ^P palette  F2 log  F3 theme"
-     , line dim "S scores   ^S share seed"
-     , line dim "Mouse: map click, wheel lists"
+     , line title (t m LabelKeys)
+     , line dim (t m KeysMove)
+     , line dim (t m KeysPickUpDescend)
+     , line dim (t m KeysReadZapThrow)
+     , line dim (t m KeysTakeOffRedrawQuit)
+     , line dim (t m KeysHelpLogTheme)
+     , line dim (t m KeysScoresShare)
+     , line dim (t m KeysMouse)
      ] ++ overLine
 
 directionPrompt : Model -> Maybe String
 directionPrompt m =
   case m.pendingDir of
-    Just (ZapDir _) =>
-      Just "Zap in which direction?  hjkl/yubn or arrows, Esc cancels"
-    Just (ThrowDir _) =>
-      Just "Throw in which direction?  hjkl/yubn or arrows, Esc cancels"
+    Just (ZapDir _) => Just (t m ZapPrompt)
+    Just (ThrowDir _) => Just (t m ThrowPrompt)
     Nothing => Nothing
 
 ||| Up to `n` messages matching the presentation filter, oldest first.
@@ -195,27 +258,27 @@ filterPrefix : Model -> String
 filterPrefix m =
   if m.logFilter == AllMessages
      then ""
-     else "[" ++ show m.logFilter ++ "] "
+     else "[" ++ logFilterText m ++ "] "
 
 latestMessage : Model -> Node Msg
 latestMessage m =
   case find (\msg => messageMatches m.logFilter msg.kind) m.game.messages of
     Nothing => truncated (styled m DimRole)
-      ("(no " ++ show m.logFilter ++ " messages)")
+      (tf m NoMessages [logFilterText m])
     Just msg => truncated (messageStyleFor m.theme msg.kind)
-      (filterPrefix m ++ msg.text)
+      (filterPrefix m ++ renderMessage m.language msg)
 
 latestNode : Model -> Node Msg
 latestNode m =
   case m.playback of
-    Just pb => truncated (styled m TitleRole) (playbackText pb)
+    Just pb => truncated (styled m TitleRole) (playbackText m pb)
     Nothing => case directionPrompt m of
       Just text => truncated (styled m TitleRole) text
       Nothing =>
         case m.hover of
           Just c =>
             case describeCell m.game c of
-              Just text => truncated (styled m HeaderRole) ("Hover " ++ text)
+              Just text => truncated (styled m HeaderRole) (tf m Hover [text])
               Nothing => latestMessage m
           Nothing => latestMessage m
 
@@ -230,10 +293,10 @@ classicLayout m =
 
 minimapLegend : Model -> List (Node Msg)
 minimapLegend m =
-  [ line (styled m TitleRole) "Minimap"
-  , line (styled m DimRole) "@ you   < > stairs"
-  , line (styled m DimRole) "+ door   # wall   . floor"
-  , line (styled m DimRole) "Only explored cells are shown."
+  [ line (styled m TitleRole) (t m Minimap)
+  , line (styled m DimRole) (t m MinimapYou)
+  , line (styled m DimRole) (t m MinimapSymbols)
+  , line (styled m DimRole) (t m MinimapOnlyExplored)
   ]
 
 ||| The eight rows under the map hold a 36x8 minimap and a short legend.
@@ -248,8 +311,9 @@ minimapPanel m =
 logLines : Model -> List (Node Msg)
 logLines m =
   case filteredMessages 8 m.logFilter m.game of
-    [] => [line (styled m DimRole) ("(no " ++ show m.logFilter ++ " messages)")]
-    msgs => map (\msg => line (messageStyleFor m.theme msg.kind) msg.text) msgs
+    [] => [line (styled m DimRole) (tf m NoMessages [logFilterText m])]
+    msgs => map (\msg => line (messageStyleFor m.theme msg.kind)
+                              (renderMessage m.language msg)) msgs
 
 wideLayout : Model -> Node Msg
 wideLayout m =
@@ -291,49 +355,50 @@ inventoryRow m (letter, i) =
 inventoryRows : Model -> List (Node Msg)
 inventoryRows m =
   case packItems m.game of
-    [] => [line (styled m DimRole) "(empty)"]
+    [] => [line (styled m DimRole) (t m EmptySlot)]
     items => map (inventoryRow m) (zip letters items)
 
-categoryName : ItemKind -> String
-categoryName (Weapon _) = "weapon"
-categoryName (Armor _) = "armor"
-categoryName (Food _) = "food"
-categoryName (Potion _) = "potion"
-categoryName (Scroll _) = "scroll"
-categoryName (Wand _) = "wand"
-categoryName (Ring _) = "ring"
-categoryName Gold = "gold"
-categoryName Amulet = "amulet"
+categoryName : Model -> ItemKind -> String
+categoryName m (Weapon _) = t m CategoryWeapon
+categoryName m (Armor _) = t m CategoryArmor
+categoryName m (Food _) = t m CategoryFood
+categoryName m (Potion _) = t m CategoryPotion
+categoryName m (Scroll _) = t m CategoryScroll
+categoryName m (Wand _) = t m CategoryWand
+categoryName m (Ring _) = t m CategoryRing
+categoryName m Gold = t m CategoryGold
+categoryName m Amulet = t m CategoryAmulet
 
 signed : Int32 -> String
 signed n = if n >= 0 then "+" ++ show n else show n
 
 enchantLines : Model -> Item -> List (Node Msg)
 enchantLines m i =
-  [line (styled m BodyRole) ("Enchantment: " ++ signed i.enchant)]
+  [line (styled m BodyRole) (tf m Enchantment [signed i.enchant])]
   ++ (if i.cursed
-         then [line (styled m DangerRole) "Cursed: cannot remove"]
+         then [line (styled m DangerRole) (t m CursedCannotRemove)]
          else [])
 
 kindDetail : Model -> Item -> List (Node Msg)
 kindDetail m i =
   if not (itemKnown m.game.knownKinds i)
-     then [line (styled m DimRole) "Unidentified: effects hidden"]
+     then [line (styled m DimRole) (t m Unidentified)]
      else case i.kind of
             Weapon _ => enchantLines m i
             Armor _ => enchantLines m i
             Ring _ => enchantLines m i
-            Wand _ => [line (styled m BodyRole) ("Charges: " ++ show i.charges)]
+            Wand _ => [line (styled m BodyRole)
+                            (tf m Charges [show i.charges])]
             Gold => [line (styled m BodyRole)
-                          ("Amount: " ++ show i.count ++ " gold")]
+                          (tf m AmountGold [show i.count])]
             _ => []
 
-equippedSlot : Player -> ItemId -> Maybe String
-equippedSlot p iid =
-  if p.wielded == Just iid then Just "wielded"
-  else if p.worn == Just iid then Just "worn"
-  else if p.leftRing == Just iid then Just "left ring"
-  else if p.rightRing == Just iid then Just "right ring"
+equippedSlot : Model -> Player -> ItemId -> Maybe String
+equippedSlot m p iid =
+  if p.wielded == Just iid then Just (t m Wielded)
+  else if p.worn == Just iid then Just (t m Worn)
+  else if p.leftRing == Just iid then Just (t m LeftRing)
+  else if p.rightRing == Just iid then Just (t m RightRing)
   else Nothing
 
 itemLetter : Model -> ItemId -> String
@@ -347,14 +412,15 @@ comparisonLines m i =
   let dim = styled m DimRole
   in case i.kind of
        Weapon _ =>
-         [line dim ("Wielded: "
-           ++ equippedName m.game m.game.player.wielded)]
+         [line dim (tf m WieldedLabel
+           [equippedName m m.game m.game.player.wielded])]
        Armor _ =>
-         [line dim ("Worn: " ++ equippedName m.game m.game.player.worn)]
+         [line dim (tf m WornLabel
+           [equippedName m m.game m.game.player.worn])]
        Ring _ =>
-         [line dim ("Rings: "
-           ++ equippedName m.game m.game.player.leftRing ++ " / "
-           ++ equippedName m.game m.game.player.rightRing)]
+         [line dim (tf m RingsLabel
+           [equippedName m m.game m.game.player.leftRing ++ " / "
+            ++ equippedName m m.game m.game.player.rightRing])]
        _ => []
 
 selectedOrFirst : Model -> Maybe Item
@@ -371,30 +437,29 @@ inventoryDetailLines m =
   let body = styled m BodyRole
       dim = styled m DimRole
   in case selectedOrFirst m of
-       Nothing => [line dim "The pack is empty."]
+       Nothing => [line dim (t m PackEmpty)]
        Just i =>
-         [ line (styled m TitleRole) "Item details"
+         [ line (styled m TitleRole) (t m ItemDetails)
          , line (styled m HeaderRole) (itemDisplayNameIn m.game i)
-         , line body ("Slot " ++ itemLetter m i.id ++ "   "
-                       ++ categoryName i.kind)
-         ] ++ (case equippedSlot m.game.player i.id of
-                 Just s => [line (styled m HeaderRole) ("Equipped: " ++ s)]
-                 Nothing => [line dim "In pack"])
+         , line body (tf m Slot [itemLetter m i.id, categoryName m i.kind])
+         ] ++ (case equippedSlot m m.game.player i.id of
+                 Just s => [line (styled m HeaderRole) (tf m Equipped [s])]
+                 Nothing => [line dim (t m InPack)])
            ++ kindDetail m i
            ++ (if i.protected
-                  then [line body "Protected from theft"]
+                  then [line body (t m ProtectedFromTheft)]
                   else [])
            ++ comparisonLines m i
            ++ [ line dim "------------"
-              , line dim "Enter uses this item."
-              , line dim "a-z selects another slot."
+              , line dim (t m EnterUses)
+              , line dim (t m SelectSlot)
               ]
 
 inventoryHints : Model -> List (Node Msg)
 inventoryHints m =
   let dim = styled m DimRole
-  in [ line dim "a-z select  Enter use  q quaff  r read  e eat  w wield"
-     , line dim "W wear  P put on  R/T take off  z zap  t throw  d drop  Esc"
+  in [ line dim (t m InventoryHelp1)
+     , line dim (t m InventoryHelp2)
      ]
 
 inventoryRowAt : Model -> Maybe (Char, Item) -> Node Msg
@@ -422,7 +487,7 @@ inventoryTwoColumnRows m =
 inventoryLayout : Model -> Node Msg
 inventoryLayout m =
   let count = length (packItems m.game)
-      title = "Inventory  " ++ show count ++ "/" ++ show maxPack
+      title = tf m InventoryTitle [show count, show maxPack]
   in box [width (Cells 80), height (Cells 24)] [
        line (styled m TitleRole) title,
        box [height (Cells 20)] (inventoryTwoColumnRows m),
@@ -434,7 +499,7 @@ inventoryLayout m =
 inventoryWideLayout : Model -> Node Msg
 inventoryWideLayout m =
   let count = length (packItems m.game)
-      title = "Inventory  " ++ show count ++ "/" ++ show maxPack
+      title = tf m InventoryTitle [show count, show maxPack]
   in box [width (Cells 120), height (Cells 40)] [
        line (styled m TitleRole) title,
        row [height (Cells 35)] [
@@ -446,19 +511,19 @@ inventoryWideLayout m =
        ],
        box [height (Cells 2)] (inventoryHints m),
        box [height (Cells 1)] [truncated (styled m DimRole)
-         "Equipped items are marked with *."],
+         (t m InventoryEquippedNote)],
        box [height (Cells 1), style (styled m StatusRole)]
          [truncated (styled m BodyRole) (classicStatus m)]
      ]
 
 helpRow : String -> String -> String
 helpRow keys description =
-  "  " ++ padRight 29 ' ' keys ++ description
+  "  " ++ padWidth 29 keys ++ description
 
-allKeysText : Keymap -> List CommandId -> String
-allKeysText km cids =
-  case concatMap (\cid => keysFor cid km) cids of
-    [] => "unbound"
+allKeysText : Model -> List CommandId -> String
+allKeysText m cids =
+  case concatMap (\cid => keysFor cid m.keymap) cids of
+    [] => t m HelpUnbound
     ks => formatKeys ks
 
 movementCommands : List CommandId
@@ -467,48 +532,52 @@ movementCommands =
   , MoveNorthWest, MoveNorthEast, MoveSouthWest, MoveSouthEast
   ]
 
-movementText : Keymap -> String
-movementText km =
-  let primaries = filter (/= "unbound")
-                       (map (formatPrimary km) movementCommands)
+movementText : Model -> String
+movementText m =
+  let primaries = filter (/= t m HelpUnbound)
+                       (map (formatPrimary m.keymap) movementCommands)
       base = joinBy " " primaries
-  in if anyArrowKeys movementCommands km
-        then (if base == "" then "arrows" else base ++ " / arrows")
-        else if base == "" then "unbound" else base
+  in if anyArrowKeys movementCommands m.keymap
+        then (if base == ""
+                 then t m HelpArrows
+                 else base ++ " / " ++ t m HelpArrows)
+        else if base == "" then t m HelpUnbound else base
 
-helpLines : Keymap -> List String
-helpLines km =
-  [ "Movement"
-  , helpRow (movementText km) "move (8 directions)"
-  , helpRow (allKeysText km [Wait, Search, PickUp]) "wait / search / pick up"
-  , helpRow (allKeysText km [Descend, Ascend]) "descend / ascend stairs"
-  , "Items"
-  , helpRow (formatKeys (keysFor Inventory km)) "inventory (a-z, Enter)"
-  , helpRow (allKeysText km [Quaff, Read, Eat]) "quaff / read / eat"
-  , helpRow (allKeysText km [Wield, Wear]) "wield / wear"
-  , helpRow (allKeysText km [PutOnRing, TakeOff]) "put on / take off"
-  , helpRow (allKeysText km [Zap, Throw]) "zap / throw (then direction)"
-  , helpRow (formatKeys (keysFor Drop km)) "drop"
-  , "Interface"
-  , helpRow (allKeysText km [Help, Palette]) "help / command palette"
-  , helpRow (allKeysText km [LogFilter, Theme, Animation])
-            "log / theme / animation"
-  , helpRow (formatKeys (keysFor Redraw km)) "redraw"
-  , helpRow (allKeysText km [Scores, Share]) "scores / share seed"
-  , helpRow (formatKeys (keysFor Quit km)) "quit"
-  , helpRow "Mouse" "click map, inventory, palette"
-  ]
+helpLines : Model -> List String
+helpLines m =
+  let km = m.keymap
+  in [ t m HelpMovement
+     , helpRow (movementText m) (t m HelpMove)
+     , helpRow (allKeysText m [Wait, Search, PickUp])
+               (t m HelpWaitSearchPickUp)
+     , helpRow (allKeysText m [Descend, Ascend]) (t m HelpStairs)
+     , t m HelpItems
+     , helpRow (formatKeys (keysFor Inventory km)) (t m HelpInventory)
+     , helpRow (allKeysText m [Quaff, Read, Eat]) (t m HelpQuaffReadEat)
+     , helpRow (allKeysText m [Wield, Wear]) (t m HelpWieldWear)
+     , helpRow (allKeysText m [PutOnRing, TakeOff]) (t m HelpPutOnTakeOff)
+     , helpRow (allKeysText m [Zap, Throw]) (t m HelpZapThrow)
+     , helpRow (formatKeys (keysFor Drop km)) (t m HelpDrop)
+     , t m HelpInterface
+     , helpRow (allKeysText m [Help, Palette]) (t m HelpHelpPalette)
+     , helpRow (allKeysText m [LogFilter, Theme, Animation])
+               (t m HelpLogThemeAnimation)
+     , helpRow (formatKeys (keysFor Redraw km)) (t m HelpRedraw)
+     , helpRow (allKeysText m [Scores, Share]) (t m HelpScoresShare)
+     , helpRow (formatKeys (keysFor Quit km)) (t m HelpQuit)
+     , helpRow (t m HelpMouseLabel) (t m HelpMouse)
+     ]
 
-helpExtra : List String
-helpExtra =
+helpExtra : Model -> List String
+helpExtra m =
   [ ""
-  , "Symbols"
-  , "  @ you   A-Z monsters   # wall   . floor   + door   < > stairs"
-  , "  ) weapon   [ armor   % food   ! potion   ? scroll   / wand   = ring"
-  , "  $ gold   \" amulet   ^ trap"
-  , "  Bump to attack. The Amulet is on depth 26; return it to depth 1."
-  , "Settings: $XDG_DATA_HOME/lambda-rogue/settings.json"
-  , "Palette: Save settings / Reload settings."
+  , t m HelpSymbols
+  , t m HelpSymbols1
+  , t m HelpSymbols2
+  , t m HelpSymbols3
+  , t m HelpTactics
+  , t m HelpSettings
+  , t m HelpPaletteHint
   ]
 
 helpLayout : Model -> Node Msg
@@ -516,28 +585,32 @@ helpLayout m =
   let wide = m.width >= 120 && m.height >= 40
       panelW = if wide then 100 else 80
       panelH = if wide then 30 else 24
-      extra = if wide then helpExtra else []
+      extra = if wide then helpExtra m else []
   in box [width (Cells panelW), height (Cells panelH),
           border Single, borderColor (borderColorOf m), padding 1] (
-       [line (styled m TitleRole) "lambda-rogue help"]
-       ++ map (line (styled m BodyRole)) (helpLines m.keymap ++ extra)
-       ++ [line (styled m DimRole) "Esc, ? or F1 closes this help."])
+       [line (styled m TitleRole) (t m HelpTitle)]
+       ++ map (line (styled m BodyRole)) (helpLines m ++ extra)
+       ++ [line (styled m DimRole) (t m HelpClose)])
 
 numberedFrom : Nat -> List a -> List (Nat, a)
 numberedFrom _ [] = []
 numberedFrom n (x :: xs) = (n, x) :: numberedFrom (S n) xs
 
+public export
+paletteRowText : Model -> (Nat, PaletteEntry) -> String
+paletteRowText m (n, entry) =
+  let marker = if n == m.paletteIndex then ">" else " "
+  in marker ++ " " ++ padWidth 26 entry.label ++ "  " ++ entry.hint
+
 paletteRow : Model -> (Nat, PaletteEntry) -> Node Msg
-paletteRow m (n, entry) =
-  let selected = n == m.paletteIndex
-      marker = if selected then ">" else " "
+paletteRow m row =
+  let selected = fst row == m.paletteIndex
       rowStyle = if selected then styled m TitleRole else styled m BodyRole
-  in line rowStyle (marker ++ " " ++ padRight 26 ' ' entry.label
-                    ++ "  " ++ entry.hint)
+  in line rowStyle (paletteRowText m row)
 
 paletteEntriesInColumns : Model -> Node Msg
 paletteEntriesInColumns m =
-  let entries = numberedFrom 0 (paletteEntriesFor m.keymap)
+  let entries = numberedFrom 0 (paletteEntriesForLang m.language m.keymap)
       (left, right) = splitAt 11 entries
   in row [width (Cells 74)] [
        box [width (Cells 37)] (map (paletteRow m) left),
@@ -548,37 +621,56 @@ paletteLayout : Model -> Node Msg
 paletteLayout m =
   let wide = m.width >= 120 && m.height >= 40
       panelW = if wide then 90 else 78
-      panelH = if wide then 28 else 20
+      -- One entry is the language switch; the wide layout needs two more
+      -- rows than the old 25-entry palette to keep its controls visible.
+      panelH = if wide then 30 else 20
       entries = if wide
                    then box [] (map (paletteRow m)
-                                    (numberedFrom 0 (paletteEntriesFor m.keymap)))
+                                    (numberedFrom 0
+                                      (paletteEntriesForLang m.language m.keymap)))
                    else paletteEntriesInColumns m
   in box [width (Cells panelW), height (Cells panelH), border Single,
           borderColor (borderColorOf m), paddingXY 1 0] (
-       [line (styled m TitleRole) "Command palette"]
+       [line (styled m TitleRole) (t m PaletteTitle)]
        ++ [entries]
-       ++ [line (styled m DimRole) "Up/Down or j/k move   Enter run   Esc close"])
+       ++ [line (styled m DimRole) (t m PaletteControls)])
 
-resultLabel : GameOver -> String
-resultLabel Won = "won"
-resultLabel (Dead _) = "dead"
+resultLabel : Model -> GameOver -> String
+resultLabel m Won = t m ResultWon
+resultLabel m (Dead _) = t m ResultDead
 
-scoreHeader : String
-scoreHeader =
-  padRight 6 ' ' "Depth" ++ padRight 4 ' ' "Lv"
-  ++ padRight 8 ' ' "Exp" ++ padRight 8 ' ' "Gold"
-  ++ padRight 8 ' ' "Turns" ++ "Result"
+||| The recorded cause of death, shown beside the result.  A victory has no
+||| cause, so its cell stays blank.
+causeLabel : Model -> GameOver -> String
+causeLabel m Won = ""
+causeLabel m (Dead cause) = deathName m.language cause
 
-scoreRow : Score -> String
-scoreRow s =
-  padRight 6 ' ' (show s.depth) ++ padRight 4 ' ' (show s.level)
-  ++ padRight 8 ' ' (show s.exp) ++ padRight 8 ' ' (show s.gold)
-  ++ padRight 8 ' ' (show s.turns) ++ resultLabel s.result
+||| Column widths in terminal cells.  The seven columns exactly fill the
+||| panel's usable width (74 cells on 80x24, 86 cells on 120x40), and the
+||| Japanese headers fit every one of them.
+scoreColumns : Model -> List Len
+scoreColumns m =
+  let causeWidth = if m.width >= 120 && m.height >= 40 then 40 else 28
+  in [7, 8, 8, 8, 8, 7, causeWidth]
 
-replayLabel : Maybe Bool -> String
-replayLabel Nothing = "not checked"
-replayLabel (Just True) = "verified"
-replayLabel (Just False) = "MISMATCH"
+public export
+scoreHeader : Model -> String
+scoreHeader m =
+  joinCells (scoreColumns m)
+    [ t m ScoreDepth, t m ScoreLv, t m ScoreExp, t m ScoreGold
+    , t m ScoreTurns, t m ScoreResult, t m ScoreCause ]
+
+public export
+scoreRow : Model -> Score -> String
+scoreRow m s =
+  joinCells (scoreColumns m)
+    [ show s.depth, show s.level, show s.exp, show s.gold, show s.turns
+    , resultLabel m s.result, causeLabel m s.result ]
+
+replayLabel : Model -> Maybe Bool -> String
+replayLabel m Nothing = t m NotChecked
+replayLabel m (Just True) = t m Verified
+replayLabel m (Just False) = t m Mismatch
 
 scoreLayout : Model -> Node Msg
 scoreLayout m =
@@ -588,21 +680,21 @@ scoreLayout m =
       body = styled m BodyRole
       dim = styled m DimRole
       rows = case m.scores of
-               [] => [line dim "No completed runs yet."]
-               ss => map (line body . scoreRow) (take 8 ss)
+               [] => [line dim (t m NoScores)]
+               ss => map (line body . scoreRow m) (take 8 ss)
       replayStyle = if m.replayOk == Just False
                        then styled m DangerRole
                        else body
   in box [width (Cells panelW), height (Cells panelH), border Single,
           borderColor (borderColorOf m), padding 1] (
-       [ line (styled m TitleRole) "Scores"
-       , line dim "Completed runs, newest first."
-       , line (styled m HeaderRole) scoreHeader
+       [ line (styled m TitleRole) (t m Scores)
+       , line dim (t m ScoresSubtitle)
+       , line (styled m HeaderRole) (scoreHeader m)
        ] ++ rows ++
        [ line dim "------------"
-       , line body ("Seed: " ++ seedHex m.game.seed)
-       , line replayStyle ("Replay: " ++ replayLabel m.replayOk)
-       , line dim "P replays from the start.  Esc, S or Enter closes."
+       , line body (tf m ScoreSeed [seedHex m.game.seed])
+       , line replayStyle (tf m ScoreReplay [replayLabel m m.replayOk])
+       , line dim (t m ScoreControls)
        ])
 
 shareLayout : Model -> Node Msg
@@ -614,21 +706,20 @@ shareLayout m =
       dim = styled m DimRole
   in box [width (Cells panelW), height (Cells panelH), border Single,
           borderColor (borderColorOf m), padding 1] (
-       [ line (styled m TitleRole) "Share seed"
-       , line body ("Seed: " ++ seedHex m.game.seed)
-       , line dim "Give this seed to another player."
-       , line dim "Same seed + same commands = same run."
-       , line dim ("Start with: lambda-rogue --seed " ++ seedHex m.game.seed)
+       [ line (styled m TitleRole) (t m ShareTitle)
+       , line body (tf m ShareSeed [seedHex m.game.seed])
+       , line dim (t m ShareGive)
+       , line dim (t m ShareRule)
+       , line dim (tf m ShareStart [seedHex m.game.seed])
        , line dim "------------"
-       , line body ("Depth " ++ show m.game.depth
-                     ++ "   Level " ++ show m.game.player.level
-                     ++ "   Turn " ++ show m.game.turn)
-       , line body ("Recorded commands: "
-                     ++ show (length m.replay.commands))
-       , line body ("Replay: " ++ replayLabel m.replayOk)
+       , line body (tf m ShareDepthLine
+                      [show m.game.depth, show m.game.player.level,
+                       show m.game.turn])
+       , line body (tf m ShareCommands [show (length m.replay.commands)])
+       , line body (tf m ShareReplay [replayLabel m m.replayOk])
        , line dim "------------"
-       , line body "c or Enter copies the seed to the clipboard."
-       , line dim "Esc or Ctrl-S closes."
+       , line body (t m ShareCopy)
+       , line dim (t m ShareClose)
        ])
 
 tooSmall : Model -> Node Msg
@@ -637,8 +728,7 @@ tooSmall m =
        align Center, justify JCenter] [
     box [height (Cells 3), align Center] [
       truncated (styled m DangerRole)
-        ("Terminal too small: need 80x24, have "
-         ++ show m.width ++ "x" ++ show m.height)
+        (tf m TerminalTooSmall [show m.width, show m.height])
     ]
   ]
 
