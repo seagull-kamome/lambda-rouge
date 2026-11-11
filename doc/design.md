@@ -1,6 +1,6 @@
 # lambda-rogue 設計書
 
-- Status: Draft 1.12（M5 スライス 2 完了。言語切替と全角幅の列揃えを追加）
+- Status: Draft 1.13（M5 スライス 3 完了。テーマのフォールバック・アニメーション速度・リプレイ一覧とシークを追加）
 - Date: 2026-11-11
 - Target: Idris 2 0.8.0 / rc2 backend / termui 0.1.0 / rc2base 0.1.0
 - Reference: Rogue 5.4.4 (Berkeley Rogue) を第一候補とする
@@ -520,8 +520,9 @@ lambda-rogue/
 - `Ctrl-P` でコマンドパレット。`TextInput` + `Select` であいまい検索、
   説明、ショートカットを表示する。スライス 11 では 24 項目の一覧を
   上下キー/j/k で移動し、Enter で実行する。M5 スライス 1 で探索を、
-  スライス 2 で言語切替を加えて 26 項目になった。各項目は通常の `Msg` を
-  持つため、キーボードと同じ更新経路を通る。Esc または `Ctrl-P` で閉じる。
+  スライス 2 で言語切替を、スライス 3 でアニメーション速度とリプレイ一覧を
+  加えて 28 項目になった。各項目は通常の `Msg` を持つため、キーボードと
+  同じ更新経路を通る。Esc または `Ctrl-P` で閉じる。
   スコア画面、シード共有、テーマ巡回、アニメーション無効化、言語切替、
   設定の保存・再読み込み、セーブして終了、ロードもパレットから実行できる。
   ヒントは有効なキーマップから生成する。
@@ -554,15 +555,17 @@ lambda-rogue/
 ### 5.8 ビジュアル
 
 - テーマ: Classic CGA、Modern Dark、Amber、Green Phosphor、
-  High Contrast、Colorblind Safe。既定は Classic CGA。
+  High Contrast、Colorblind Safe、Monochrome。既定は Classic CGA。
 - スライス 5 では `LambdaRogue.UI.Theme` に `Theme` と `StyleRole` を置き、
-  6 テーマを `TermUI.Style` の `Indexed` / `RGB` に変換する。`F3` と
+  テーマを `TermUI.Style` の `Indexed` / `RGB` / 属性に変換する。`F3` と
   コマンドパレットの `Cycle theme` で巡回し、変更時は Canvas を同じテーマで
   描き直す。テーマは `App.Model.theme` にだけ存在し、Core、乱数、ターン、
   リプレイ、状態ダイジェストには影響しない。
-- `TermUI.Style` は `Default` / `Indexed` / `RGB` を持つ。TrueColor が使えない
-  場合の 256 色/16 色への自動フォールバック、`COLORTERM` / `TERM` /
-  `NO_COLOR` の検出、`--ascii` / `--no-color` / `--theme` は未実装。
+- `TermUI.Style` は `Default` / `Indexed` / `RGB` を持つ。M5 スライス 3 で
+  `COLORTERM` / `TERM` / `NO_COLOR` から色能力を検出し、TrueColor 非対応
+  端末では ANSI テーマ、色なしでは Monochrome へ自動フォールバックする。
+  `--theme` / `--no-color` / `--no-animation` はこの起動だけ設定を上書きする。
+  `--ascii` は未実装で、ゲームのグリフは常に ASCII である。
   現状は選択したテーマの色をそのまま使う。
 - 色だけで意味を伝えない。記号、形、太字、下線、ラベルを併用する。
 - グリフ:
@@ -731,16 +734,23 @@ lambda-rogue/
 - `replayFromJSON` は `schema` と `gameVersion` の完全一致、16 文字 hex の
   seed、既知のコマンド型・引数を検証する。1 つでも不正ならファイル全体を
   拒否する。
-- スコア画面の `P` から可視リプレイを開始する。`App.Model.playback` が
-  元のゲームを保持し、表示用のゲームだけを `newGame seed` から
-  `replayCommands` の順に進める。記録済みリプレイと元のゲームは変更しない。
+- スコア画面の `P` または `F5` の一覧から可視リプレイを開始する。
+  `App.Model.playback` が元のゲームと「閉じたらスコア画面へ戻るか」を保持し、
+  表示用のゲームだけを `newGame seed` から `replayCommands` の順に進める。
+  記録済みリプレイと元のゲームは変更しない。
 - 再生は `Every "replay"` のティックで 1 コマンドずつ進める。速度は
   slow 400ms / normal 200ms / fast 80ms。Space で一時停止、`.`/Enter で
   1 コマンド、`+`/`-` で速度、`R` で最初から、Esc/q でスコア画面へ戻る。
   アニメーションは再生中のイベントにも同じ `Effect` 経路で付く。
+- `F5` とパレットの `Replay browser` が保存済みファイルを一覧表示する。
+  上下キー・`j`/`k`・ホイールで選択し、Enter またはダブルクリックで再生する。
+  一覧は `Persist.Replay.listReplayFiles` の結果を新しい順に表示する。
+- 再生中は `Left`/`Right` で 10 コマンドずつ、`Home`/`End` で先頭/末尾へ
+  シークする。`seekPlayback` は seed と prefix から `newGame` を再実行して
+  決定的に状態を作るため、`Replay` と `gameDigest` は変わらない。
 - 途中チェックポイントや状態スナップショットはまだない。各ティックは
   先頭から再生済みの状態をそのまま持ち、終了時に記録した最終状態と
-  `gameDigest` で比較できる。リプレイの一覧・選択 UI、シークも未実装。
+  `gameDigest` で比較できる。シークは毎回 prefix を再実行する。
 - 途中から分岐する「what-if」は非目標。必要な場合は状態スナップショットを追加する。
 
 ### 6.3 戦績
@@ -1252,8 +1262,8 @@ Rogue 5.4.4 の公開データ表に基づく確定値を反映した。原本�
   スコア画面への復帰。
 - [x] 再生中のマウス入力を無視し、記録済みリプレイと元ゲームを変更しない。
 - [x] `PlaybackTest`、`SubsTest`、`ViewTest`、`MouseTest` の追加テスト。
-- [ ] 途中チェックポイント、状態スナップショット、再生位置のシークは
-  未実装。
+- [x] 再生位置のシークは M5 スライス 3 で追加した。
+- [ ] 状態スナップショット型の途中チェックポイントは未実装。
 
 #### M4 スライス 9: キーバインド設定（完了）
 
@@ -1267,8 +1277,9 @@ Rogue 5.4.4 の公開データ表に基づく確定値を反映した。原本�
   `F3` / `F4` はオーバーレイ中もグローバル、`Ctrl-C` は緊急終了。
 - [x] ヘルプとパレットのヒントをキーマップから生成。パレットに
   `Save settings` / `Reload settings` を追加。スライス 11 で
-  `Save and quit` / `Load game` も加わり、24 項目になる。M5 スライス 1 で
-  `Search for traps` を加えて 25 項目になった。
+  `Save and quit` / `Load game` も加わった。M5 スライス 1 の
+  `Search for traps`、スライス 2 の `Switch language`、スライス 3 の
+  `Cycle animation speed` と `Replay browser` を経て 28 項目になった。
 - [x] `SettingsTest`、`SubsTest`、`ViewTest` の追加テスト。
 - [ ] 設定画面（キー割り当ての対話編集）は未実装。現状はファイル編集と
   パレットからの再読み込みで変更する。
@@ -1379,19 +1390,44 @@ M5 の優先順位は次の通り。残りの忠実性より、表示言語と�
   リプレイに影響しないことを `CatalogTest`、`SettingsTest`、`StartupTest`、
   `PersistTest`、`ViewTest` で検証し、全体 897 チェックを通した。
 
-#### M5 スライス 3: リッチ UI（予定）
+#### M5 スライス 3: リッチ UI（完了）
 
-- [ ] TrueColor 非対応端末の自動フォールバックと `--theme` を追加する。
-- [ ] ヘッダ、サイドバー、ログ、ステータス、オーバーレイの情報密度と
-  レスポンシブ配置を磨く。狭い画面でもキー操作とログが破綻しないようにする。
-- [ ] アニメーションの速度設定、`prefers-reduced-motion` 相当の自動無効化、
-  移動補間・投射物・視界フェードを検討する。
-- [ ] マウスのコンテキストメニュー、長押し、ドラッグ移動など、キーボードを
-  置き換えない範囲の操作を追加する。
-- [ ] アクセシビリティ（高コントラスト、色以外の手掛かり、ASCII、キーのみ）
-  をテーマとヘルプに統合する。
-- [ ] リプレイの一覧・選択 UI、チェックポイント、シークを M4 の残りから
-  引き継ぐ。
+- [x] `ColourSupport`（NoColour / AnsiColour / TrueColour） と
+  `detectColourSupport` を追加した。`NO_COLOR` と `TERM=dumb` は
+  モノクロ、`COLORTERM=truecolor|24bit` は TrueColor、それ以外は ANSI と
+  みなす。TrueColor でない端末では RGB テーマを ANSI の
+  `ClassicCga` / `HighContrast` へ落とし、色を出さない端末では
+  `Monochrome` テーマを使う。
+- [x] `monochrome` テーマを追加した。色は使わず、太字・下線・反転だけで
+  タイトル、危険、プレイヤー、モンスター、アイテム、トラップを区別する。
+- [x] `--theme <id>`、`--no-color`、`--no-animation` を起動オプションに
+  追加した。`--theme` と `--no-color` はその起動だけ `settings.json` を
+  上書きし、設定ファイルは書き換えない。未知のテーマ ID はエラーにする。
+- [x] `AnimationSpeed = SlowAnimation | NormalAnimation | FastAnimation`
+  （`slow` / `normal` / `fast`、32 / 16 / 8 ms）を追加し、
+  `settings.json` の `animationSpeed` とパレットの
+  `Cycle animation speed` から変更できるようにした。`NO_MOTION` と
+  `--no-animation` は設定より優先してアニメーションを無効にする。
+- [x] オーバーレイの寸法を実際のレイアウトに合わせ、ヘルプ・パレット・
+  リプレイ一覧の行数を広い画面と狭い画面で調整した。パレットは現在の
+  アニメーション速度をヒント列に表示し、再生中は 10 セルの進捗バーを出す。
+- [x] `F5` とパレットの `Replay browser` で保存済みリプレイを一覧表示し、
+  上下キー・`j`/`k`・マウスのクリックで選択、Enter またはダブルクリックで
+  再生する。壊れたファイルは一覧内にエラーを出すだけでゲームは継続する。
+- [x] 再生中に `Left`/`Right` で 10 コマンドずつ、`Home`/`End` で
+  先頭/末尾へシークする。シークは seed から prefix を決定的に再実行する
+  方式で、`Replay` 自体は変更しない。途中チェックポイントの保存は行わない。
+- [x] `Playback.verified` を `Maybe Bool` に変更した。ファイルから読んだ
+  リプレイは未検査で始まり、再生完了時に検証結果を入れる。
+- [x] ヘルプにリプレイ操作とアクセシビリティの節を追加し、色以外の
+  手掛かり（下線・記号・太字）をテーマ横断で使うようにした。キーボードだけで
+  全機能に到達でき、マウスは補助に留める。
+- [x] `ThemeTest`、`StartupTest`、`SettingsTest`、`AnimationTest`、
+  `PlaybackTest`、`SubsTest`、`ViewTest`、`MouseTest` を更新し、
+  全体 991 チェックを通した。
+- [ ] 移動の補間、投射物の飛翔、視界フェードは引き続き未実装。
+- [ ] リプレイの状態スナップショット型チェックポイントは未実装。
+  シークは毎回 prefix を再実行するため、長いランでは最初ほど時間がかかる。
 
 ## 10. リスクと未決事項
 
@@ -1499,3 +1535,4 @@ M5 の優先順位は次の通り。残りの忠実性より、表示言語と�
 | D44 | 2026-11-09 | M5 スライス 1 の完了後、`doc/rogue-reference.md` 17 章の残りの忠実性より、メッセージカタログ（スライス 2）とリッチ UI（スライス 3）を優先する。カタログは Core のメッセージをキーと引数に分離し、英語・日本語を切り替えられるようにする。 | ゲーム内容の細部を増やす前に、表示言語と操作感を実際に使いやすい水準へ届け、UI と言語の境界を先に固めるため。 |
 | D45 | 2026-11-10 | メッセージは `Core.Message.Msg` の型付き値として Core で生成し、`Message` に安定キー `key`、安定引数 `args`、正規英語 `text` を保存する。`App.Catalog` はキーとテンプレートで英語・日本語を描画し、`key = ""` または未知キーは `text` へフォールバックする。`settings.json` の `language` を既定英語とし、`--lang en|ja` がその起動だけ上書きする。 | 言語を表示層だけに閉じ込め、旧セーブ・旧リプレイ・未知キーを安全に読みつつ、言語切替が `gameDigest`、乱数、ターン、リプレイに影響しないことを保証するため。 |
 | D46 | 2026-11-11 | パレット・スコア・ヘルプの桁揃えは文字数ではなく `TermUI.Width.stringWidth` / `charWidth` で端末セル幅を測る。コマンドパレットに `Switch language` を追加し、選択時に `settings.json` へ保存する。スコアは `result.cause` を `Cause` / `死因` 列に表示する。 | 日本語の全角文字で列がずれるのを防ぎ、実行中にキーボードだけで言語を切り替えられるようにし、戦績で死因を確認できるようにするため。表示と言語の変更は引き続き `Game` / `Replay` / `gameDigest` に影響しない。 |
+| D47 | 2026-11-11 | 表示能力は `ColourSupport`（NoColour / AnsiColour / TrueColour） として検出し、`NO_COLOR` / `TERM=dumb` は `Monochrome`、TrueColor 非対応は ANSI の `ClassicCga` / `HighContrast` へ落とす。`--theme`・`--no-color`・`--no-animation` はその起動だけ上書きする。アニメーションは `AnimationSpeed`（slow/normal/fast = 32/16/8ms）を持ち、`NO_MOTION` と `--no-animation` で無効化する。リプレイは `F5` の一覧から選択し、シークは `seekPlayback` が seed + prefix を再実行して作る。`Playback.verified` は `Maybe Bool` とし、読み込んだリプレイは完了時に検証する。 | 端末や環境の制約下でも色・動きに依存せず遊べるようにし、表示能力の判定と演出設定を Core・RNG・リプレイから完全に分離するため。シークを状態保存ではなく決定的な再実行にすることで、既存のリプレイ形式と `gameDigest` の互換性を保つ。 |

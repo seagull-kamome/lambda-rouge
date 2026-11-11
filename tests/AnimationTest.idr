@@ -128,6 +128,25 @@ run = do
     (mStepOn.game.turn == mStepOff.game.turn
      && mStepOn.replay.commands == mStepOff.replay.commands)
 
+  let mSpeed = fst (update CycleAnimationSpeed m1)
+  check "cycling the animation speed advances it"
+    (mSpeed.ui.animationSpeed == FastAnimation)
+  check "cycling the animation speed keeps the game and replay"
+    (mSpeed.game.turn == m1.game.turn
+     && mSpeed.ui.animationSpeed /= m1.ui.animationSpeed
+     && mSpeed.replay.commands == m1.replay.commands)
+  check "animation speeds cycle slow, normal, fast"
+    (nextAnimationSpeed SlowAnimation == NormalAnimation
+     && nextAnimationSpeed NormalAnimation == FastAnimation
+     && nextAnimationSpeed FastAnimation == SlowAnimation)
+  check "slow animation gives effects a longer life"
+    (animationDelay SlowAnimation == 32
+     && animationDelay NormalAnimation == 16
+     && animationDelay FastAnimation == 8)
+  check "animation speed ids round-trip"
+    (all (\sp => animationSpeedFromId (animationSpeedId sp) == Just sp)
+         [SlowAnimation, NormalAnimation, FastAnimation])
+
   let mToggled = fst (update ToggleAnimations m1)
   check "turning animation off clears the overlay"
     (not mToggled.animationsEnabled && null mToggled.animations)

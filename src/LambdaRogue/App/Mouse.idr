@@ -44,9 +44,11 @@ layoutSize m =
   if m.width < 80 || m.height < 24
      then (m.width, m.height)
   else if m.helpOpen
-          then if isWideScreen m then (100, 30) else (80, 24)
+          then if isWideScreen m then (100, 32) else (80, 24)
   else if m.paletteOpen
-          then if isWideScreen m then (90, 28) else (78, 24)
+          then if isWideScreen m then (90, 32) else (78, 22)
+  else if m.ui.replayBrowserOpen
+          then if isWideScreen m then (90, 30) else (78, 24)
   else if m.scoreOpen
           then if isWideScreen m then (90, 30) else (78, 24)
   else if m.shareOpen
@@ -212,6 +214,19 @@ paletteClickMsg m e =
                                    else Just (PaletteSelect n)
                         else Nothing
 
+replayBrowserClickMsg : Model -> MouseEvent -> Maybe Msg
+replayBrowserClickMsg m e =
+  if not (inPanel m e.column e.row)
+     then Just CloseReplayBrowser
+     else let (_, y0) = layoutOrigin m
+              firstRow = y0 + 2
+              n = integerToNat (cast (e.row - firstRow))
+          in if e.row >= firstRow && n < length m.ui.replayFiles
+                then if e.clicks >= 2
+                        then Just (ReplayBrowserRun n)
+                        else Just (ReplayBrowserSelect n)
+                else Nothing
+
 shareClickMsg : Model -> MouseEvent -> Maybe Msg
 shareClickMsg m e =
   if not (inPanel m e.column e.row)
@@ -268,6 +283,14 @@ mouseMsg m e =
                     (RightButton, ButtonDown) => Just ClosePalette
                     (WheelUp, _) => Just PalettePrev
                     (WheelDown, _) => Just PaletteNext
+                    _ => Nothing
+     else if m.ui.replayBrowserOpen
+             then case (e.button, e.action) of
+                    (LeftButton, ButtonDown) =>
+                      replayBrowserClickMsg m e
+                    (RightButton, ButtonDown) => Just CloseReplayBrowser
+                    (WheelUp, _) => Just ReplayBrowserPrev
+                    (WheelDown, _) => Just ReplayBrowserNext
                     _ => Nothing
      else if m.scoreOpen
              then case (e.button, e.action) of

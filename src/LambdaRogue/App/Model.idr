@@ -88,13 +88,14 @@ data Msg
   | PaletteSelect Nat
   | PaletteRun Nat
   | ToggleAnimations
+  | CycleAnimationSpeed
   | AnimationTick
   | SaveSettings
   | ReloadSettings
   | SaveAndQuit
   | LoadGame
   | LoadedSave (Maybe SaveFile)
-  | ApplySettings Theme Bool Keymap Language
+  | ApplySettings Theme Bool AnimationSpeed Keymap Language
   | StartReplay
   | ReplayTick
   | ReplayToggle
@@ -102,7 +103,20 @@ data Msg
   | ReplaySpeedUp
   | ReplaySpeedDown
   | ReplayRestart
+  | ReplaySeekBack
+  | ReplaySeekForward
+  | ReplaySeekStart
+  | ReplaySeekEnd
   | CloseReplay
+  | OpenReplayBrowser
+  | CloseReplayBrowser
+  | ReplayBrowserNext
+  | ReplayBrowserPrev
+  | ReplayBrowserSelect Nat
+  | ReplayBrowserRun Nat
+  | ReplayFiles (List String)
+  | ReplayBrowserOpenSelected
+  | ReplayFileLoaded String (Maybe Replay)
 
 ||| Presentation-only message filter.  The Core keeps every message; the
 ||| filter only decides which ones the log pane shows.
@@ -204,7 +218,9 @@ paletteEntries =
   , MkPaletteEntry "Share seed" "Ctrl-S" OpenShare (Just Share)
   , MkPaletteEntry "Cycle theme" "F3" CycleTheme (Just Theme)
   , MkPaletteEntry "Toggle animation" "F4" ToggleAnimations (Just Animation)
+  , MkPaletteEntry "Cycle animation speed" "" CycleAnimationSpeed Nothing
   , MkPaletteEntry "Switch language" "ja" SwitchLanguage Nothing
+  , MkPaletteEntry "Replay browser" "F5" OpenReplayBrowser (Just ReplayBrowser)
   , MkPaletteEntry "Save settings" "" SaveSettings Nothing
   , MkPaletteEntry "Reload settings" "" ReloadSettings Nothing
   , MkPaletteEntry "Save and quit" "" SaveAndQuit Nothing
@@ -314,8 +330,8 @@ slowerPlayback NormalPlayback = SlowPlayback
 slowerPlayback SlowPlayback = SlowPlayback
 
 ||| A visible replay owns the game shown on screen while it runs.  The
-||| original game is kept aside so closing the playback returns to the
-||| score screen without changing the recorded run.
+||| original game is kept aside so closing the playback returns to where
+||| it started without changing the recorded run.
 public export
 record Playback where
   constructor MkPlayback
@@ -327,7 +343,26 @@ record Playback where
   playing : Bool
   speed : PlaybackSpeed
   done : Bool
-  verified : Bool
+  verified : Maybe Bool
+  ||| Whether to reopen the score screen when the playback closes.  A
+  ||| replay launched from the browser mid-run returns to the map instead.
+  returnToScores : Bool
+
+||| Presentation-only UI state that is neither game state nor a modal
+||| overlay's contents.  Keeping it in one record makes the extra fields
+||| easy to extend without touching every `Model` constructor call.
+public export
+record UiState where
+  constructor MkUiState
+  animationSpeed : AnimationSpeed
+  replayBrowserOpen : Bool
+  replayFiles : List String
+  replayIndex : Nat
+  replayError : Maybe String
+
+public export
+defaultUiState : UiState
+defaultUiState = MkUiState NormalAnimation False [] 0 Nothing
 
 public export
 record Model where
@@ -355,19 +390,21 @@ record Model where
   playback : Maybe Playback
   keymap : Keymap
   language : Language
+  ui : UiState
 
 public export
 initModel : Canvas -> Game -> Model
 initModel c g = MkModel c g 80 24 False Nothing Nothing Nothing
                        False False 0 AllMessages (emptyReplay g.seed)
                        [] False False Nothing ClassicCga Nothing [] True Nothing
-                       defaultKeymap English
+                       defaultKeymap English defaultUiState
 
 ||| True while one of the modal screens owns the keyboard and the map.
 public export
 overlayOpen : Model -> Bool
 overlayOpen m =
   m.helpOpen || m.paletteOpen || m.scoreOpen || m.shareOpen
+  || m.ui.replayBrowserOpen
 
 ||| True while a visible replay owns the keyboard.  The map is still on
 ||| screen, but ordinary game commands must not run.

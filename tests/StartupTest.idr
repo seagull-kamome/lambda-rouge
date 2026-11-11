@@ -6,6 +6,7 @@ import Data.String
 import LambdaRogue.App.Catalog
 import LambdaRogue.App.Startup
 import LambdaRogue.Core.Rng
+import LambdaRogue.UI.Theme
 import System
 
 check : String -> Bool -> IO ()
@@ -39,6 +40,18 @@ optionsSeed _ = Nothing
 optionsFailed : Either String StartOptions -> Bool
 optionsFailed (Left _) = True
 optionsFailed _ = False
+
+optionsTheme : Either String StartOptions -> Maybe (Maybe Theme)
+optionsTheme (Right opts) = Just opts.theme
+optionsTheme _ = Nothing
+
+optionsNoColour : Either String StartOptions -> Maybe Bool
+optionsNoColour (Right opts) = Just opts.noColour
+optionsNoColour _ = Nothing
+
+optionsNoAnimation : Either String StartOptions -> Maybe Bool
+optionsNoAnimation (Right opts) = Just opts.noAnimation
+optionsNoAnimation _ = Nothing
 
 public export
 run : IO ()
@@ -86,6 +99,39 @@ run = do
   check "an invalid --seed value is localized"
     (case parseStartOptionsIn Japanese ["--seed", "NOPE"] of
        Left message => isInfixOf (unpack "NOPE") (unpack message)
+       Right _ => False)
+  check "--theme amber selects the amber theme"
+    (optionsTheme (parseStartOptions ["--theme", "amber"])
+     == Just (Just Amber))
+  check "--theme monochrome selects monochrome"
+    (optionsTheme (parseStartOptions ["--theme", "monochrome"])
+     == Just (Just Monochrome))
+  check "no --theme leaves the settings theme in charge"
+    (optionsTheme (parseStartOptions []) == Just Nothing)
+  check "--theme rejects an unknown id"
+    (optionsFailed (parseStartOptions ["--theme", "neon"]))
+  check "--theme rejects a missing value"
+    (optionsFailed (parseStartOptions ["--theme"]))
+  check "--theme rejects an uppercase id"
+    (optionsFailed (parseStartOptions ["--theme", "Amber"]))
+  check "--no-color disables colour"
+    (optionsNoColour (parseStartOptions ["--no-color"]) == Just True)
+  check "colour is enabled by default"
+    (optionsNoColour (parseStartOptions []) == Just False)
+  check "--no-animation disables animation"
+    (optionsNoAnimation (parseStartOptions ["--no-animation"]) == Just True)
+  check "animation is enabled by default"
+    (optionsNoAnimation (parseStartOptions []) == Just False)
+  check "the new flags combine with --lang"
+    (case parseStartOptions ["--theme", "amber", "--no-color",
+                             "--no-animation", "--lang", "ja"] of
+       Right opts => opts.theme == Just Amber
+                     && opts.noColour && opts.noAnimation
+                     && opts.language == Just Japanese
+       Left _ => False)
+  check "an invalid --theme value is localized"
+    (case parseStartOptionsIn Japanese ["--theme", "neon"] of
+       Left message => isInfixOf (unpack "neon") (unpack message)
        Right _ => False)
   check "clock seeds depend on both time and process"
     (combineSeed 1 1 /= combineSeed 2 1

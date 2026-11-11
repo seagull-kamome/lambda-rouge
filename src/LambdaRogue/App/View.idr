@@ -17,6 +17,7 @@ import LambdaRogue.Core.Replay
 import LambdaRogue.Core.Rng
 import LambdaRogue.Core.Survival
 import LambdaRogue.Core.Types
+import LambdaRogue.UI.Animation
 import LambdaRogue.UI.LogView
 import LambdaRogue.UI.MapView
 import LambdaRogue.UI.Theme
@@ -51,6 +52,11 @@ speedText : Model -> PlaybackSpeed -> String
 speedText m SlowPlayback = t m ReplaySlow
 speedText m NormalPlayback = t m ReplayNormal
 speedText m FastPlayback = t m ReplayFast
+
+replayLabel : Model -> Maybe Bool -> String
+replayLabel m Nothing = t m NotChecked
+replayLabel m (Just True) = t m ReplayVerified
+replayLabel m (Just False) = t m ReplayMismatch
 
 borderColorOf : Model -> Color
 borderColorOf m = (styled m BorderRole).fg
@@ -115,14 +121,25 @@ classicStatus m =
                         ++ hungerName m.language (hungerState p.hunger)
      ++ gameOverText m m.game
 
+||| A ten-cell progress bar for the replay's command position.
+progressBar : Nat -> Nat -> String
+progressBar finished count =
+  let filled = if count == 0
+                  then 0
+                  else length (takeWhile (\k => (k + 1) * count <= finished * 10)
+                                         [1 .. 10])
+  in "[" ++ pack (replicate filled '#')
+       ++ pack (replicate (10 `minus` filled) '-') ++ "]"
+
 playbackText : Model -> Playback -> String
 playbackText m pb =
   tf m ReplayBar [show pb.played, show pb.commandCount]
+  ++ progressBar pb.played pb.commandCount
   ++ "  " ++ speedText m pb.speed
   ++ (if pb.done then "  " ++ t m ReplayComplete
       else if pb.playing then "  " ++ t m ReplayPlaying
       else "  " ++ t m ReplayPaused)
-  ++ "  " ++ (if pb.verified then t m ReplayVerified else t m ReplayMismatch)
+  ++ "  " ++ replayLabel m pb.verified
   ++ "   " ++ t m ReplayControls
 
 header : Model -> String
@@ -563,7 +580,8 @@ helpLines m =
      , helpRow (allKeysText m [LogFilter, Theme, Animation])
                (t m HelpLogThemeAnimation)
      , helpRow (formatKeys (keysFor Redraw km)) (t m HelpRedraw)
-     , helpRow (allKeysText m [Scores, Share]) (t m HelpScoresShare)
+     , helpRow (allKeysText m [Scores, Share, ReplayBrowser])
+               (t m HelpScoresShare)
      , helpRow (formatKeys (keysFor Quit km)) (t m HelpQuit)
      , helpRow (t m HelpMouseLabel) (t m HelpMouse)
      ]
@@ -578,13 +596,15 @@ helpExtra m =
   , t m HelpTactics
   , t m HelpSettings
   , t m HelpPaletteHint
+  , t m HelpReplay
+  , t m HelpAccessibility
   ]
 
 helpLayout : Model -> Node Msg
 helpLayout m =
   let wide = m.width >= 120 && m.height >= 40
       panelW = if wide then 100 else 80
-      panelH = if wide then 30 else 24
+      panelH = if wide then 32 else 24
       extra = if wide then helpExtra m else []
   in box [width (Cells panelW), height (Cells panelH),
           border Single, borderColor (borderColorOf m), padding 1] (
@@ -600,7 +620,10 @@ public export
 paletteRowText : Model -> (Nat, PaletteEntry) -> String
 paletteRowText m (n, entry) =
   let marker = if n == m.paletteIndex then ">" else " "
-  in marker ++ " " ++ padWidth 26 entry.label ++ "  " ++ entry.hint
+      hint = case entry.action of
+               CycleAnimationSpeed => animationSpeedId m.ui.animationSpeed
+               _ => entry.hint
+  in marker ++ " " ++ padWidth 26 entry.label ++ "  " ++ hint
 
 paletteRow : Model -> (Nat, PaletteEntry) -> Node Msg
 paletteRow m row =
@@ -621,9 +644,9 @@ paletteLayout : Model -> Node Msg
 paletteLayout m =
   let wide = m.width >= 120 && m.height >= 40
       panelW = if wide then 90 else 78
-      -- One entry is the language switch; the wide layout needs two more
-      -- rows than the old 25-entry palette to keep its controls visible.
-      panelH = if wide then 30 else 20
+      -- Two entries were added for animation speed and the replay browser;
+      -- the wide layout needs two more rows to keep its controls visible.
+      panelH = if wide then 32 else 22
       entries = if wide
                    then box [] (map (paletteRow m)
                                     (numberedFrom 0
@@ -634,6 +657,34 @@ paletteLayout m =
        [line (styled m TitleRole) (t m PaletteTitle)]
        ++ [entries]
        ++ [line (styled m DimRole) (t m PaletteControls)])
+
+replayBrowserRow : Model -> (Nat, String) -> Node Msg
+replayBrowserRow m (n, name) =
+  let selected = n == m.ui.replayIndex
+      marker = if selected then ">" else " "
+      style = if selected then styled m TitleRole else styled m BodyRole
+  in line style (marker ++ " " ++ name)
+
+replayBrowserLayout : Model -> Node Msg
+replayBrowserLayout m =
+  let wide = m.width >= 120 && m.height >= 40
+      panelW = if wide then 90 else 78
+      panelH = if wide then 30 else 24
+      names = m.ui.replayFiles
+      visible = take (if wide then 24 else 18) (numberedFrom 0 names)
+      rows = if null names
+                then [line (styled m DimRole) (t m ReplayBrowserEmpty)]
+                else map (replayBrowserRow m) visible
+      errorRows = case m.ui.replayError of
+                    Nothing => []
+                    Just _ => [line (styled m DangerRole)
+                                    (t m ReplayBrowserError)]
+  in box [width (Cells panelW), height (Cells panelH), border Single,
+          borderColor (borderColorOf m), paddingXY 1 0] (
+       [line (styled m TitleRole) (t m ReplayBrowserTitle)]
+       ++ rows
+       ++ errorRows
+       ++ [line (styled m DimRole) (t m ReplayBrowserControls)])
 
 resultLabel : Model -> GameOver -> String
 resultLabel m Won = t m ResultWon
@@ -666,11 +717,6 @@ scoreRow m s =
   joinCells (scoreColumns m)
     [ show s.depth, show s.level, show s.exp, show s.gold, show s.turns
     , resultLabel m s.result, causeLabel m s.result ]
-
-replayLabel : Model -> Maybe Bool -> String
-replayLabel m Nothing = t m NotChecked
-replayLabel m (Just True) = t m Verified
-replayLabel m (Just False) = t m Mismatch
 
 scoreLayout : Model -> Node Msg
 scoreLayout m =
@@ -746,6 +792,8 @@ view m =
              then centered m (helpLayout m)
      else if m.paletteOpen
              then centered m (paletteLayout m)
+     else if m.ui.replayBrowserOpen
+             then centered m (replayBrowserLayout m)
      else if m.scoreOpen
              then centered m (scoreLayout m)
      else if m.shareOpen

@@ -12,6 +12,7 @@ import Data.Maybe
 import Language.JSON
 import LambdaRogue.App.Catalog
 import LambdaRogue.App.Keymap
+import LambdaRogue.UI.Animation
 import LambdaRogue.UI.Theme
 
 %default covering
@@ -21,6 +22,7 @@ record Settings where
   constructor MkSettings
   theme : Theme
   animationsEnabled : Bool
+  animationSpeed : AnimationSpeed
   keymap : Keymap
   language : Language
 
@@ -28,12 +30,13 @@ public export
 Eq Settings where
   a == b = a.theme == b.theme
            && a.animationsEnabled == b.animationsEnabled
+           && a.animationSpeed == b.animationSpeed
            && a.keymap == b.keymap
            && a.language == b.language
 
 public export
 defaultSettings : Settings
-defaultSettings = MkSettings ClassicCga True defaultKeymap English
+defaultSettings = MkSettings ClassicCga True NormalAnimation defaultKeymap English
 
 public export
 settingsSchema : String
@@ -90,6 +93,10 @@ settingsFromJSON json@(JObject _) = do
        animations <- case lookup "animation" json of
                        Nothing => Just True
                        Just v => asBool v
+       speed <- case lookup "animationSpeed" json of
+                  Nothing => Just NormalAnimation
+                  Just (JString value) => animationSpeedFromId value
+                  Just _ => Nothing
        keymap <- case lookup "keys" json of
                    Nothing => Just defaultKeymap
                    Just v => parseKeymap v
@@ -101,7 +108,7 @@ settingsFromJSON json@(JObject _) = do
                      Just (JString value) =>
                        Just (fromMaybe English (languageFromId value))
                      Just _ => Nothing
-       pure (MkSettings theme animations keymap language)
+       pure (MkSettings theme animations speed keymap language)
 settingsFromJSON _ = Nothing
 
 public export
@@ -119,6 +126,7 @@ settingsToJSON s =
     [ ("schema", JString settingsSchema)
     , ("theme", JString (themeId s.theme))
     , ("animation", JBoolean s.animationsEnabled)
+    , ("animationSpeed", JString (animationSpeedId s.animationSpeed))
     , ("language", JString (languageId s.language))
     , ("keys", JObject (map bindingJSON s.keymap))
     ]

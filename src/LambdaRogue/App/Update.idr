@@ -1,6 +1,7 @@
 ||| The Elm-style update function.
 module LambdaRogue.App.Update
 
+import Data.List
 import Data.Maybe
 import LambdaRogue.App.Canvas
 import LambdaRogue.App.Model
@@ -32,12 +33,16 @@ commandFor DropAction iid = Just (Drop iid)
 commandFor ZapAction _ = Nothing
 commandFor ThrowAction _ = Nothing
 
+closeBrowserState : UiState -> UiState
+closeBrowserState ui = { replayBrowserOpen := False, replayError := Nothing } ui
+
 clearPack : Model -> Model
 clearPack m =
   { inventoryOpen := False, selectedItem := Nothing,
     inventoryIntent := Nothing, pendingDir := Nothing,
     helpOpen := False, paletteOpen := False,
-    scoreOpen := False, shareOpen := False, hover := Nothing } m
+    scoreOpen := False, shareOpen := False, hover := Nothing,
+    ui := closeBrowserState m.ui } m
 
 redraw : Model -> Cmd Msg
 redraw m =
@@ -45,7 +50,9 @@ redraw m =
            >> pure Painted)
 
 settingsOf : Model -> Settings
-settingsOf m = MkSettings m.theme m.animationsEnabled m.keymap m.language
+settingsOf m =
+  MkSettings m.theme m.animationsEnabled m.ui.animationSpeed
+             m.keymap m.language
 
 saveSettingsCmd : Model -> Cmd Msg
 saveSettingsCmd m =
@@ -148,8 +155,58 @@ advancePlayback m =
               pb' : Playback
               pb' = { remaining := rest, played := played',
                       done := finished,
+                      verified := if finished
+                                     then Just (replayMatches pb.replay out.game)
+                                     else pb.verified,
                       playing := if finished then False else pb.playing } pb
           in { game := out.game, playback := Just pb', animations := effects } m
+
+||| Begin a visible replay.  `verified` is `Nothing` for a replay read from
+||| disk because this run has no recorded final digest to compare against;
+||| the flag is filled in when playback reaches its end.
+beginPlayback : Replay -> Maybe Bool -> Model -> (Model, Cmd Msg)
+beginPlayback r verified m =
+  let commands = replayCommands r
+      pb : Playback
+      pb = MkPlayback m.game r commands 0 (length commands)
+                      (not (null commands)) NormalPlayback
+                      (null commands) verified m.scoreOpen
+      m' : Model
+      m' = { game := newGame r.seed, playback := Just pb,
+             scoreOpen := False, shareOpen := False, helpOpen := False,
+             paletteOpen := False, inventoryOpen := False,
+             selectedItem := Nothing, inventoryIntent := Nothing,
+             pendingDir := Nothing, hover := Nothing, animations := [],
+             ui := closeBrowserState m.ui } m
+  in (m', redraw m')
+
+||| Move to command `target` by deterministically replaying the prefix from
+||| the recorded seed.  Seeking pauses playback and never edits the replay.
+seekPlayback : Nat -> Model -> Model
+seekPlayback target m =
+  case m.playback of
+    Nothing => m
+    Just pb =>
+      let commandList = replayCommands pb.replay
+          count = length commandList
+          n = min target count
+          replayed : List Command
+          replayed = take n commandList
+          remaining = drop n commandList
+          g = foldl (\gg, c => (step c gg).game) (newGame pb.replay.seed) replayed
+          done = null remaining
+          pb' : Playback
+          pb' = { remaining := remaining, played := n, done := done,
+                  playing := False,
+                  verified := if done
+                                 then Just (replayMatches pb.replay g)
+                                 else Nothing } pb
+      in { game := g, playback := Just pb', animations := [] } m
+
+nth : Nat -> List a -> Maybe a
+nth Z (x :: _) = Just x
+nth (S k) (_ :: xs) = nth k xs
+nth _ [] = Nothing
 
 public export
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -168,14 +225,16 @@ update OpenInventory m =
       m' = { inventoryOpen := True, selectedItem := Nothing,
              inventoryIntent := Nothing, helpOpen := False,
              paletteOpen := False, scoreOpen := False, shareOpen := False,
-             pendingDir := Nothing, hover := Nothing } m
+             pendingDir := Nothing, hover := Nothing,
+             ui := closeBrowserState m.ui } m
   in (m', NoCmd)
 update (OpenInventoryFor act) m =
   let m' : Model
       m' = { inventoryOpen := True, selectedItem := Nothing,
              inventoryIntent := Just act, helpOpen := False,
              paletteOpen := False, scoreOpen := False, shareOpen := False,
-             pendingDir := Nothing, hover := Nothing } m
+             pendingDir := Nothing, hover := Nothing,
+             ui := closeBrowserState m.ui } m
   in (m', NoCmd)
 update CloseInventory m =
   let m' : Model
@@ -203,7 +262,8 @@ update OpenHelp m =
       m' = { helpOpen := True, paletteOpen := False, scoreOpen := False,
              shareOpen := False, inventoryOpen := False,
              selectedItem := Nothing, inventoryIntent := Nothing,
-             pendingDir := Nothing, hover := Nothing } m
+             pendingDir := Nothing, hover := Nothing,
+             ui := closeBrowserState m.ui } m
   in (m', NoCmd)
 update CloseHelp m =
   let m' : Model
@@ -215,7 +275,7 @@ update OpenPalette m =
              helpOpen := False, scoreOpen := False, shareOpen := False,
              inventoryOpen := False, selectedItem := Nothing,
              inventoryIntent := Nothing, pendingDir := Nothing,
-             hover := Nothing } m
+             hover := Nothing, ui := closeBrowserState m.ui } m
   in (m', NoCmd)
 update ClosePalette m =
   let m' : Model
@@ -276,14 +336,21 @@ update ToggleAnimations m =
       m' = { animationsEnabled := enabled,
              animations := if enabled then m.animations else [] } m
   in (m', Batch [redraw m', saveSettingsCmd m'])
+update CycleAnimationSpeed m =
+  let speed = nextAnimationSpeed m.ui.animationSpeed
+      m' : Model
+      m' = { ui := { animationSpeed := speed } m.ui } m
+  in (m', saveSettingsCmd m')
 update SaveSettings m = (m, saveSettingsCmd m)
 update ReloadSettings m =
   (m, Perform (do s <- loadSettings
-                  pure (ApplySettings s.theme s.animationsEnabled s.keymap s.language)))
-update (ApplySettings theme animations keymap language) m =
+                  pure (ApplySettings s.theme s.animationsEnabled
+                                       s.animationSpeed s.keymap s.language)))
+update (ApplySettings theme animations speed keymap language) m =
   let m' : Model
       m' = { theme := theme, animationsEnabled := animations,
              keymap := keymap, language := language,
+             ui := { animationSpeed := speed } m.ui,
              animations := if animations then m.animations else [] } m
   in (m', redraw m')
 update SaveAndQuit m =
@@ -316,20 +383,68 @@ update AnimationTick m =
   in if null m.animations
         then (m, NoCmd)
         else (m', if mapVisible m' then redraw m' else NoCmd)
-update StartReplay m =
-  let r = m.replay
-      commands = replayCommands r
-      pb : Playback
-      pb = MkPlayback m.game r commands 0 (length commands)
-                      (not (null commands)) NormalPlayback
-                      (null commands) (m.replayOk == Just True)
-      m' : Model
-      m' = { game := newGame r.seed, playback := Just pb,
-             scoreOpen := False, shareOpen := False, helpOpen := False,
-             paletteOpen := False, inventoryOpen := False,
+update StartReplay m = beginPlayback m.replay m.replayOk m
+
+update OpenReplayBrowser m =
+  let m' : Model
+      m' = { helpOpen := False, paletteOpen := False, scoreOpen := False,
+             shareOpen := False, inventoryOpen := False,
              selectedItem := Nothing, inventoryIntent := Nothing,
-             pendingDir := Nothing, hover := Nothing, animations := [] } m
-  in (m', redraw m')
+             pendingDir := Nothing, hover := Nothing,
+             ui := { replayBrowserOpen := True, replayIndex := 0,
+                     replayError := Nothing } m.ui } m
+  in (m', Perform (do names <- listReplayFiles
+                      pure (ReplayFiles (reverse names))))
+
+update CloseReplayBrowser m =
+  let m' : Model
+      m' = { ui := closeBrowserState m.ui, hover := Nothing } m
+  in (m', NoCmd)
+
+update (ReplayFiles names) m =
+  let m' : Model
+      m' = { ui := { replayFiles := names, replayIndex := 0,
+                     replayError := Nothing } m.ui } m
+  in (m', NoCmd)
+
+update ReplayBrowserNext m =
+  let count = length m.ui.replayFiles
+      n = if count == 0 || m.ui.replayIndex + 1 >= count
+             then 0
+             else m.ui.replayIndex + 1
+  in ({ ui := { replayIndex := n } m.ui } m, NoCmd)
+
+update ReplayBrowserPrev m =
+  let count = length m.ui.replayFiles
+      n = if count == 0
+             then 0
+             else if m.ui.replayIndex == 0
+                     then minus count 1
+                     else minus m.ui.replayIndex 1
+  in ({ ui := { replayIndex := n } m.ui } m, NoCmd)
+
+update (ReplayBrowserSelect n) m =
+  let count = length m.ui.replayFiles
+  in ({ ui := { replayIndex := if n < count then n else m.ui.replayIndex }
+               m.ui } m, NoCmd)
+
+update (ReplayBrowserRun n) m =
+  let m0 = fst (update (ReplayBrowserSelect n) m)
+  in update ReplayBrowserOpenSelected m0
+
+update ReplayBrowserOpenSelected m =
+  case nth m.ui.replayIndex m.ui.replayFiles of
+    Nothing => (m, NoCmd)
+    Just name =>
+      (m, Perform (do r <- loadReplayFile name
+                      pure (ReplayFileLoaded name r)))
+
+update (ReplayFileLoaded name (Just r)) m = beginPlayback r Nothing m
+
+update (ReplayFileLoaded name Nothing) m =
+  let m' : Model
+      m' = { ui := { replayError := Just name } m.ui } m
+  in (m', NoCmd)
 
 update ReplayTick m =
   case m.playback of
@@ -370,6 +485,25 @@ update ReplaySpeedDown m =
       let m' : Model
           m' = { playback := Just ({ speed := slowerPlayback pb.speed } pb) } m
       in (m', redraw m')
+update ReplaySeekBack m =
+  case m.playback of
+    Nothing => (m, NoCmd)
+    Just pb => let m' = seekPlayback (minus pb.played 10) m
+               in (m', redraw m')
+update ReplaySeekForward m =
+  case m.playback of
+    Nothing => (m, NoCmd)
+    Just pb => let m' = seekPlayback (pb.played + 10) m
+               in (m', redraw m')
+update ReplaySeekStart m =
+  case m.playback of
+    Nothing => (m, NoCmd)
+    Just _ => let m' = seekPlayback 0 m in (m', redraw m')
+update ReplaySeekEnd m =
+  case m.playback of
+    Nothing => (m, NoCmd)
+    Just pb => let m' = seekPlayback pb.commandCount m
+               in (m', redraw m')
 update ReplayRestart m =
   case m.playback of
     Nothing => (m, NoCmd)
@@ -390,7 +524,8 @@ update CloseReplay m =
     Nothing => (m, NoCmd)
     Just pb =>
       let m' : Model
-          m' = { game := pb.original, playback := Nothing, scoreOpen := True,
+          m' = { game := pb.original, playback := Nothing,
+                 scoreOpen := pb.returnToScores,
                  animations := [] } m
       in (m', NoCmd)
 update (HoverCell c) m =
@@ -405,7 +540,7 @@ update OpenScores m =
              helpOpen := False, paletteOpen := False,
              inventoryOpen := False, selectedItem := Nothing,
              inventoryIntent := Nothing, pendingDir := Nothing,
-             hover := Nothing } m
+             hover := Nothing, ui := closeBrowserState m.ui } m
   in (m', NoCmd)
 update CloseScores m =
   let m' : Model
@@ -417,7 +552,7 @@ update OpenShare m =
              helpOpen := False, paletteOpen := False,
              inventoryOpen := False, selectedItem := Nothing,
              inventoryIntent := Nothing, pendingDir := Nothing,
-             hover := Nothing } m
+             hover := Nothing, ui := closeBrowserState m.ui } m
   in (m', NoCmd)
 update CloseShare m =
   let m' : Model

@@ -1706,13 +1706,16 @@ scoreOf : Game -> Maybe Score
 
 `LambdaRogue.UI.Theme` が `Theme` と `StyleRole` を公開する。
 
-- `Theme = ClassicCga | ModernDark | Amber | GreenPhosphor | HighContrast | ColorblindSafe`
+- `Theme = ClassicCga | ModernDark | Amber | GreenPhosphor | HighContrast |
+  ColorblindSafe | Monochrome`
 - `StyleRole` は背景、本文、タイトル、ヘッダ、警告、枠、ミニマップ、
   地形（岩・床・通路・ドア・階段）、モンスター、アイテム、トラップ、
   プレイヤー、メッセージ種別などの意味スロット。
 - `styleFor : Theme -> StyleRole -> Style`
 - `messageStyleFor : Theme -> MessageKind -> Style`
-- `themes`, `nextTheme`
+- `themes`, `nextTheme`, `themeId`, `themeFromId`
+- `ColourSupport = NoColour | AnsiColour | TrueColour`
+- `detectColourSupport`, `detectReducedMotion`, `themeForSupport`
 
 Classic CGA はスライス 4 までの ANSI 色と一致する。他テーマは
 `Indexed` または `RGB` を使う。`MapView` は `cellForIn` / `mapCellsIn`、
@@ -1732,20 +1735,37 @@ Classic CGA はスライス 4 までの ANSI 色と一致する。他テーマ�
 
 ### 23.3 テスト
 
-- `tests/ThemeTest.idr`: 6 テーマの一意性、巡回、Classic の既存スタイルとの
+- `tests/ThemeTest.idr`: 7 テーマの一意性、巡回、Classic の既存スタイルとの
   一致、テーマ別マップセル、メッセージスタイル、ヘッダの実描画スタイル、
-  テーマ変更がゲーム状態を変えないこと。
+  テーマ変更がゲーム状態を変えないこと。テーマ ID の往復、色能力の検出、
+  モノクロへのフォールバック、モノクロが属性だけを使うこと。
 - `tests/SubsTest.idr`: `F3`、オーバーレイ中の `F3`、パレット項目、
   `CycleTheme` の更新。
 - `tests/ViewTest.idr`: ヘッダのテーマ名、ヘルプの `F3`、パレットの
   `Cycle theme`。
 - `tests/PerfTest.idr`: Modern Dark の 120x40 描画。
 
-### 23.4 既知の制約
+### 23.4 端末能力とフォールバック（M5 スライス 3）
 
-- TrueColor 非対応端末の自動フォールバックと `--theme` は未実装。
-  `settings.json` へのテーマ保存はスライス 9 で実装済み。
+- `detectColourSupport : Maybe String -> Maybe String -> Maybe String
+  -> ColourSupport` は `NO_COLOR`, `COLORTERM`, `TERM` を受け取る。
+  空でない `NO_COLOR` と `TERM=dumb` は `NoColour`、
+  `COLORTERM=truecolor|24bit` は `TrueColour`、それ以外は `AnsiColour`。
+- `themeForSupport` は `NoColour` なら常に `Monochrome`、`AnsiColour` なら
+  RGB テーマを `ClassicCga` / `HighContrast` へ落とす。`TrueColour` は
+  要求テーマをそのまま返す。
+- `Monochrome` は前景・背景色を持たず、太字・下線・反転・淡色だけで
+  役割を区別する。ゲームのグリフは ASCII のまま。
+- `Main` は `--no-color` を `NO_COLOR` と同じ扱いにし、`--theme` が
+  あれば設定より優先してから `themeForSupport` に通す。どちらも
+  設定ファイルを書き換えない。
+- `detectReducedMotion` は `NO_MOTION` を同じ規則で判定する。
+
+### 23.5 既知の制約
+
 - テーマごとのグリフ変更（ASCII/Unicode）はまだない。色と属性だけを変える。
+- `--theme` で指定したテーマが端末能力で降格された場合、その旨は
+  起動後に明示しない。ヘッダには実際に使っているテーマ名を出す。
 
 ## 24. マウス（2026-11-02、スライス 6）
 
@@ -1758,8 +1778,9 @@ Classic CGA はスライス 4 までの ANSI 色と一致する。他テーマ�
 
 - `layoutSize : Model -> (Len, Len)` は `App.View.view` が選ぶ
   トップレベルレイアウトの寸法を返す。80x24 未満では画面全体、
-  ヘルプは 100x30 / 80x24、パレット・スコア・シェアは 90x28 / 90x30 /
-  78x24、通常とインベントリは 120x40 / 80x24。
+  ヘルプは 100x32 / 80x24、パレットは 90x32 / 78x22、リプレイ一覧は
+  90x30 / 78x24、スコア・シェアは 90x30 / 78x24、通常とインベントリは
+  120x40 / 80x24。
 - `layoutOrigin : Model -> (Len, Len)` は中央寄せの左上オフセット。
 - `mapCellAt : Model -> Len -> Len -> Maybe Coord` は通常マップの
   セルを返す。マップはクラシックでは最新メッセージ行の下、ワイドでは
@@ -1845,6 +1866,9 @@ Classic CGA はスライス 4 までの ANSI 色と一致する。他テーマ�
 - `EffectKind = Trail | Impact | Damage Int32 | Death | Pickup |
   DoorMark | TrapMark | LevelUpMark | Victory`
 - `Effect`（`kind`, `pos`, `age`, `life`）
+- `AnimationSpeed = SlowAnimation | NormalAnimation | FastAnimation`
+- `animationDelay : AnimationSpeed -> Nat`（32 / 16 / 8 ms）
+- `nextAnimationSpeed`, `animationSpeedId`, `animationSpeedFromId`
 - `mkEffect : EffectKind -> Coord -> Effect`
 - `effectsFor : Game -> Game -> List Event -> List Effect`
 - `advanceAnimations : List Effect -> List Effect`
@@ -1866,7 +1890,8 @@ Classic CGA はスライス 4 までの ANSI 色と一致する。他テーマ�
 - `AnimationTick` は `advanceAnimations` で 1 ティック進め、
   マップ表示中なら Canvas を再描画する。すべて消えたらタイマーは止まる。
 - `subs` は `animations` が空でないときだけ
-  `Every "animation" 16 AnimationTick` を追加する。
+  `Every "animation" (animationDelay m.ui.animationSpeed) AnimationTick`
+  を追加する。速度は `Model.ui.animationSpeed` にあり、表示専用である。
 - `ToggleAnimations` は `F4` とパレットの `Toggle animation` から届く。
   無効にすると現在の効果も消す。
 - `App.Canvas.drawMapAnimated` がマップの後に効果を描く。既存の
@@ -1878,8 +1903,8 @@ Classic CGA はスライス 4 までの ANSI 色と一致する。他テーマ�
 
 - `tests/AnimationTest.idr`: イベント別の位置と種類、複数桁ダメージ、
   右端クリップ、ティックによる加齢と消滅、24 個の上限、新しい効果の
-  優先、無効時の効果なし、アニメーション有無でターンとリプレイが
-  一致すること。
+  優先、無効時の効果なし、速度の巡回とティック間隔、アニメーション有無で
+  ターンとリプレイが一致すること。
 - `tests/SubsTest.idr`: `F4`、オーバーレイ中の `F4`、アニメーション中だけ
   `Every` が購読されること。
 - `tests/ViewTest.idr`: ヘルプの `F4` とパレットの `Toggle animation`。
@@ -1888,9 +1913,9 @@ Classic CGA はスライス 4 までの ANSI 色と一致する。他テーマ�
 
 - 移動の補間、投射物の飛翔、視界のフェードは未実装。現在はセル単位の
   残像・記号・数字だけ。
-- 速度設定は 16ms 固定。`prefers-reduced-motion` や環境変数の自動検出は
-  未実装。無効化は `F4` / パレットに加え、`settings.json` の `animation`
-  （スライス 9 で実装）でも行える。
+- 速度は slow/normal/fast の 3 段階（32 / 16 / 8 ms）。`NO_MOTION` と
+  `--no-animation` は起動時にアニメーションを無効化する。無効化は
+  `F4` / パレット / `settings.json` の `animation` でも行える。
 - アニメーションは 1 ターン分のイベントをまとめて出す。イベント間の
   順序再生や、複数ターンのキューイングはまだない。
 
@@ -1908,7 +1933,8 @@ Classic CGA はスライス 4 までの ANSI 色と一致する。他テーマ�
 - `playbackDelay : PlaybackSpeed -> Nat`（400 / 200 / 80 ms）
 - `fasterPlayback`, `slowerPlayback`
 - `Playback`（`original`, `replay`, `remaining`, `played`,
-  `commandCount`, `playing`, `speed`, `done`, `verified`）
+  `commandCount`, `playing`, `speed`, `done`, `verified : Maybe Bool`,
+  `returnToScores`）
 - `playbackOpen : Model -> Bool`
 
 `remaining` は `replayCommands` の順（古いコマンドが先頭）。`replay` は
@@ -1918,7 +1944,17 @@ Classic CGA はスライス 4 までの ANSI 色と一致する。他テーマ�
 
 - スコア画面で `P` を押すと `StartReplay`。`scoreOpen` を閉じ、
   `game := newGame replay.seed`、`remaining := replayCommands replay` にする。
-  `verified` は `replayOk == Just True`。
+  `verified` は `replayOk` を引き継ぐ。
+- `F5` / パレットの `Replay browser` は `OpenReplayBrowser` を出し、
+  `listReplayFiles` の結果を `ReplayFiles` で `Model.ui` に入れる。
+  `ReplayBrowserNext` / `Prev` / `Select` は選択位置だけを変え、
+  `ReplayBrowserOpenSelected` が `loadReplayFile` を `Perform` する。
+  `ReplayFileLoaded` は成功なら `beginPlayback r Nothing`、失敗なら
+  `ui.replayError` を立てる。ファイルから読んだリプレイは未検査で始まる。
+- `ReplaySeekBack` / `Forward` は 10 コマンド、`ReplaySeekStart` / `End` は
+  0 / `commandCount` を目標に `seekPlayback` を呼ぶ。`seekPlayback` は
+  seed から prefix を `step` で再実行して `remaining` と `game` を作り、
+  再生を一時停止する。`Replay` 自体は変更しない。
 - `ReplayTick` は 1 コマンドだけ `step` し、`played` を進める。
   `remaining` が空になるか `game.over` になったら `done := True`,
   `playing := False`。
@@ -1926,7 +1962,10 @@ Classic CGA はスライス 4 までの ANSI 色と一致する。他テーマ�
 - `ReplayToggle` は Space の一時停止/再開。`ReplaySpeedUp` /
   `ReplaySpeedDown` は速度を上下限付きで変える。
 - `ReplayRestart` は `newGame replay.seed` に戻して最初から再生する。
-- `CloseReplay` は `Playback.original` を `game` に戻し、スコア画面を開く。
+- `CloseReplay` は `Playback.original` を `game` に戻す。
+  `returnToScores` は開始時にスコア画面が開いていたかを保持し、
+  スコア画面から始めた再生だけスコア画面へ戻る。一覧から通常プレイ中に
+  始めた再生はマップへ戻る。
 - `subs` は再生中かつ `playing` かつ残りがあるときだけ
   `Every "replay" (playbackDelay speed) ReplayTick` を追加する。
 - `runCommand` と `mouseMsg` は `playbackOpen` の間は入力を処理しない。
@@ -1939,27 +1978,32 @@ Classic CGA はスライス 4 までの ANSI 色と一致する。他テーマ�
 
 通常の 80x24 / 120x40 レイアウトを使い、`Model.game` が再生用ゲームなので
 マップ、サイドバー、ログ、ステータスはそのまま追従する。最上段は
-`REPLAY n/N speed state verified` に置き換える。`state` は
-`playing` / `paused` / `complete`。スコア画面には
-`P replays from the start.` の案内を出す。
+`REPLAY n/N [####------] speed state verification` に置き換える。
+`state` は `playing` / `paused` / `complete`、`verification` は
+`not checked` / `verified` / `MISMATCH`。リプレイ一覧はタイトル、
+ファイル名の選択行、操作説明を出し、空なら
+`No saved replays.` を表示する。
 
 ### 26.4 テスト
 
 - `tests/PlaybackTest.idr`: 初期状態、1 コマンド進行、カウンタ、
   一時停止中のティック無視、再開、速度変更、再スタート、完走時の
-  記録状態との一致、終了時の元ゲーム復元、空リプレイ。
-- `tests/SubsTest.idr`: スコア画面の `P`、再生中のタイマー、Space、
-  Esc、再生中の通常キー抑止、一時停止時のタイマー停止。
+  記録状態との一致と検証、シークの前後移動とクランプ、リプレイ一覧の
+  選択・巡回・壊れたファイル、読み込み時の未検査状態、終了時の元ゲーム
+  復元、空リプレイ。
+- `tests/SubsTest.idr`: スコア画面の `P`、`F5` の一覧、再生中のタイマー、
+  Space、シークキー、Esc、再生中の通常キー抑止、一時停止時のタイマー停止。
 - `tests/MouseTest.idr`: 再生中のクリック無視。
-- `tests/ViewTest.idr`: スコア画面の再生案内と `REPLAY` 表示。
+- `tests/ViewTest.idr`: スコア画面の再生案内、進捗バー付き `REPLAY` 表示、
+  未検査表示、リプレイ一覧と空一覧。
 
 ### 26.5 既知の制約
 
-- 途中チェックポイント、状態スナップショット、任意位置へのシークは未実装。
-  現在は最初から 1 コマンドずつ進めるだけ。
+- 状態スナップショット型の途中チェックポイントは未実装。シークは毎回
+  seed から prefix を再実行するため、長いランでは先頭ほど時間がかかる。
 - 再生速度は 3 段階の固定値。フレーム単位の補間や可変速度はない。
-- 再生中のログスクロール、マウス操作、アイテム詳細表示は無効。
-  キーボードの再生操作だけを提供する。
+- 再生中はログスクロールとアイテム詳細表示を提供しない。マウスは
+  再生画面ではなくリプレイ一覧の選択・実行だけを補助する。
 
 ## 27. キーマップと設定（2026-11-02、スライス 9）
 
@@ -1990,7 +2034,9 @@ record Settings where
   constructor MkSettings
   theme : Theme
   animationsEnabled : Bool
+  animationSpeed : AnimationSpeed
   keymap : Keymap
+  language : Language
 
 public export
 defaultSettings : Settings
@@ -2008,6 +2054,8 @@ settingsSchema = "lambda-rogue.settings.v1"
   "schema": "lambda-rogue.settings.v1",
   "theme": "modern-dark",
   "animation": true,
+  "animationSpeed": "normal",
+  "language": "en",
   "keys": {
     "move-north": ["k", "Up"],
     "inventory": ["i"],
@@ -2018,7 +2066,15 @@ settingsSchema = "lambda-rogue.settings.v1"
 ```
 
 - `schema` は必須。未知のスキーマはファイル全体を拒否する。
-- `theme` / `animation` は省略可能で、既定は `classic-cga` / `true`。
+- `theme` / `animation` / `animationSpeed` / `language` は省略可能で、
+  既定は `classic-cga` / `true` / `normal` / `en`。
+- `animationSpeed` は `slow`, `normal`, `fast` のいずれか。未知の値は
+  ファイル全体を拒否する。`--no-animation` と `NO_MOTION` はこの値より
+  優先して、その起動だけアニメーションを止める。
+- `language` は `en` / `ja`。未知の値は `en` にフォールバックする。
+  `--lang` はその起動だけ上書きする。
+- `theme` の未知の ID はファイル全体を拒否する。`--theme` と
+  `--no-color` はその起動だけ上書きし、保存はしない。
 - `keys` の値は 1 つのコード文字列、またはコード文字列の配列。
   空配列はそのコマンドを未割り当てにする。
 - 未知のコマンド ID は無視する。既知の ID の値が壊れている場合、
@@ -2045,8 +2101,9 @@ settingsSchema = "lambda-rogue.settings.v1"
 - ヘルプ、パレット、スコア、シェア、再生画面の閉じるキーなどは、
   それぞれの画面が持つ小さな固定キー集合を使う。これは画面内の
   ナビゲーションであり、ゲームコマンドではない。
-- `F3`（テーマ）と `F4`（アニメーション）はオーバーレイ中も共通の先頭で
-  処理する。`Ctrl-C` は再生中も含めて緊急終了として最優先で扱う。
+- `F3`（テーマ）、`F4`（アニメーション）、`F5`（リプレイ一覧）は
+  オーバーレイ中も共通の先頭で処理する。`F5` は再生中だけ無視する。
+  `Ctrl-C` は再生中も含めて緊急終了として最優先で扱う。
 - 既定キーは `q` = ポーション、`Q` / `Ctrl-C` = 終了、`i` = インベントリ、
   `?` / `F1` = ヘルプ、`Ctrl-P` = パレット。通常プレイの Esc は終了しない。
 
@@ -2057,21 +2114,24 @@ settingsSchema = "lambda-rogue.settings.v1"
   矢印が 1 つでも割り当てられていれば `/ arrows` を添える。
 - パレットの `hint` は `paletteEntriesFor : Keymap -> List PaletteEntry` が
   `formatPrimary` で生成する。固定のヒント文字列は持たない。
-- パレットは 25 項目。`Save settings` / `Reload settings` / `Save and quit` /
-  `Load game` はキーを持たない項目として 19 / 20 / 21 / 22 番目に置き、
-  `Search for traps` が 23 番目、`Quit` が 24 番目である。
-- 狭い 80x24 では 25 項目を 13 行 2 列に分け、広い 120x40 では 1 列に並べる。
-- 設定は `App.Model` の `theme` / `animationsEnabled` / `keymap` にだけ
-  存在し、`Game` には保存されない。
+- パレットは 28 項目。`Cycle animation speed` は現在の速度
+  （`slow` / `normal` / `fast`）をヒント列に出す。`Replay browser` は
+  `F5` を持つ。`Save settings` / `Reload settings` / `Save and quit` /
+  `Load game` はキーを持たない項目として 22〜25 番目に置き、
+  `Search for traps` が 26 番目、`Quit` が 27 番目である。
+- 狭い 80x24 では 28 項目を 14 行 2 列に分け、広い 120x40 では 1 列に並べる。
+- 設定は `App.Model` の `theme` / `animationsEnabled` / `ui.animationSpeed` /
+  `keymap` / `language` にだけ存在し、`Game` には保存されない。
 
 ### 27.5 テスト
 
 - `tests/SettingsTest.idr`: 既定キー、コード解析・表示、再割り当て、
   重複検出、JSON の往復、未知 ID の無視、空配列の未割り当て、
-  不正値・重複・未知テーマの拒否、モデルの入力ルーティング、
+  不正値・重複・未知テーマ・未知アニメーション速度の拒否、
+  速度の往復と既定値、モデルの入力ルーティング、
   設定適用がゲームとリプレイを変えないこと、ファイル往復。
 - `tests/SubsTest.idr`: キーマップ経由の移動・アイテム・方向、
-  25 項目のパレット、設定・セーブ・ロード項目、グローバルキー。
+  28 項目のパレット、設定・セーブ・ロード・リプレイ項目、グローバルキー。
 - `tests/ViewTest.idr`: ヘルプとパレットのヒントが再割り当てに追従すること、
   ワイドヘルプが設定ファイルを示すこと。
 
@@ -2222,7 +2282,8 @@ releaseSessionLock : IO ()
   判定しない。生存 PID は安全側で実行中とみなす。
 - `settings.json`、`scores.jsonl`、リプレイファイルの書き込みは
   `writeFile` / `appendFile` で、atomic rename と `fsync` は未実装。
-- リプレイの一覧・選択 UI、チェックポイント、シークは未実装。
+- リプレイの一覧・選択 UI とシークは M5 スライス 3 で実装済み。
+  状態スナップショット型チェックポイントは未実装。
 - 戦績の名前、殺害数、プレイ日時、並び替え UI は未実装。
 - `gameDigest` は暗号学的ハッシュではない。改ざん検知ではなく再現性確認用。
 - Clang 19 は rc2 の生成する `if ((a == b))` を

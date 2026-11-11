@@ -139,15 +139,15 @@ run = do
   tFull1 <- timeNs
   report "render (full map)" 500 (tFull1 - tFull0)
 
-  let mNormal = MkModel c sampleGame 80 24 False Nothing Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English
-      mInventory = MkModel c inventoryGame 80 24 True Nothing Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English
-      mWide = MkModel c sampleGame 120 40 False Nothing Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English
+  let mNormal = MkModel c sampleGame 80 24 False Nothing Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English defaultUiState
+      mInventory = MkModel c inventoryGame 80 24 True Nothing Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English defaultUiState
+      mWide = MkModel c sampleGame 120 40 False Nothing Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English defaultUiState
       mWideDark = { theme := ModernDark } mWide
-      mWideInventory = MkModel c inventoryGame 120 40 True Nothing Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English
-      mHelp = MkModel c sampleGame 80 24 False Nothing Nothing Nothing True False 0 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English
-      mPalette = MkModel c sampleGame 80 24 False Nothing Nothing Nothing False True 2 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English
-      mScore = MkModel c sampleGame 80 24 False Nothing Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] True False (Just True) ClassicCga Nothing [] True Nothing defaultKeymap English
-      mShare = MkModel c sampleGame 80 24 False Nothing Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] False True Nothing ClassicCga Nothing [] True Nothing defaultKeymap English
+      mWideInventory = MkModel c inventoryGame 120 40 True Nothing Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English defaultUiState
+      mHelp = MkModel c sampleGame 80 24 False Nothing Nothing Nothing True False 0 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English defaultUiState
+      mPalette = MkModel c sampleGame 80 24 False Nothing Nothing Nothing False True 2 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English defaultUiState
+      mScore = MkModel c sampleGame 80 24 False Nothing Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] True False (Just True) ClassicCga Nothing [] True Nothing defaultKeymap English defaultUiState
+      mShare = MkModel c sampleGame 80 24 False Nothing Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] False True Nothing ClassicCga Nothing [] True Nothing defaultKeymap English defaultUiState
 
   tView0 <- timeNs
   renderViewN 500 80 24 mNormal

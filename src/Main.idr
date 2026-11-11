@@ -15,6 +15,7 @@ import LambdaRogue.Core.Types
 import LambdaRogue.Persist.Save
 import LambdaRogue.Persist.Score
 import LambdaRogue.Persist.Settings
+import LambdaRogue.UI.Theme
 import System
 import System.Clock
 import System.Posix.Errno
@@ -98,12 +99,26 @@ main = do
                            seed <- freshSeed
                            pure (newGame seed)
            c <- newCanvas (the Len 80) (the Len 22)
-           let base = initModel c game
-               model = { theme := settings.theme
-                       , animationsEnabled := settings.animationsEnabled
+           noColorEnv <- getEnv "NO_COLOR"
+           colorterm <- getEnv "COLORTERM"
+           term <- getEnv "TERM"
+           noMotion <- getEnv "NO_MOTION"
+           let support = if requested.noColour
+                            then NoColour
+                            else detectColourSupport noColorEnv colorterm term
+               theme = themeForSupport support
+                         (fromMaybe settings.theme requested.theme)
+               animations = settings.animationsEnabled
+                            && not (requested.noAnimation
+                                    || detectReducedMotion noMotion)
+               base = initModel c game
+               model = { theme := theme
+                       , animationsEnabled := animations
                        , keymap := settings.keymap
                        , language := language
-                       , scores := scores } base
+                       , scores := scores
+                       , ui := { animationSpeed := settings.animationSpeed }
+                                 defaultUiState } base
            drawMapAnimated model.theme model.hover model.animations c game
            r <- runProgram (programWith model)
            case r of

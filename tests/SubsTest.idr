@@ -107,6 +107,42 @@ isReplayToggle : Maybe Msg -> Bool
 isReplayToggle (Just ReplayToggle) = True
 isReplayToggle _ = False
 
+isSeekBack : Maybe Msg -> Bool
+isSeekBack (Just ReplaySeekBack) = True
+isSeekBack _ = False
+
+isSeekForward : Maybe Msg -> Bool
+isSeekForward (Just ReplaySeekForward) = True
+isSeekForward _ = False
+
+isSeekStart : Maybe Msg -> Bool
+isSeekStart (Just ReplaySeekStart) = True
+isSeekStart _ = False
+
+isSeekEnd : Maybe Msg -> Bool
+isSeekEnd (Just ReplaySeekEnd) = True
+isSeekEnd _ = False
+
+isOpenBrowser : Maybe Msg -> Bool
+isOpenBrowser (Just OpenReplayBrowser) = True
+isOpenBrowser _ = False
+
+isCloseBrowser : Maybe Msg -> Bool
+isCloseBrowser (Just CloseReplayBrowser) = True
+isCloseBrowser _ = False
+
+isBrowserNext : Maybe Msg -> Bool
+isBrowserNext (Just ReplayBrowserNext) = True
+isBrowserNext _ = False
+
+isBrowserPrev : Maybe Msg -> Bool
+isBrowserPrev (Just ReplayBrowserPrev) = True
+isBrowserPrev _ = False
+
+isBrowserOpen : Maybe Msg -> Bool
+isBrowserOpen (Just ReplayBrowserOpenSelected) = True
+isBrowserOpen _ = False
+
 isScores : Maybe Msg -> Bool
 isScores (Just OpenScores) = True
 isScores _ = False
@@ -153,7 +189,7 @@ run = do
       g : Game
       g = { player := p, items := [potion] } sampleGame
       m : Model
-      m = MkModel c g 80 24 True Nothing Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English
+      m = MkModel c g 80 24 True Nothing Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English defaultUiState
 
   check "a selects the first pack item"
     (isSelect 2 (key m (Press (KChar 'a') noMods)))
@@ -212,7 +248,7 @@ run = do
       gWand = { player := { inventory := [3] } sampleGame.player
               , items := [wandItem] } sampleGame
       mWand : Model
-      mWand = MkModel c gWand 80 24 True (Just 3) Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English
+      mWand = MkModel c gWand 80 24 True (Just 3) Nothing Nothing False False 0 AllMessages (emptyReplay sampleGame.seed) [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English defaultUiState
   check "Enter zaps a selected wand"
     (isAction ZapAction (key mWand (Press KEnter noMods)))
 
@@ -311,8 +347,8 @@ run = do
     (isScores (key mNormal (Press (KChar 'S') noMods)))
   check "Ctrl-S opens seed sharing"
     (isShare (key mNormal (Press (KChar 's') (MkMods False True False))))
-  check "the palette has 26 entries"
-    (paletteCount == 26)
+  check "the palette has 28 entries"
+    (paletteCount == 28)
   check "the palette includes Scores"
     (case paletteEntryAt 15 of
        Just e => e.label == "Scores"
@@ -333,38 +369,48 @@ run = do
        Just e => e.label == "Toggle animation"
                   && (case e.action of ToggleAnimations => True; _ => False)
        Nothing => False)
-  check "the palette includes Switch language"
+  check "the palette includes Cycle animation speed"
     (case paletteEntryAt 19 of
+       Just e => e.label == "Cycle animation speed"
+                  && (case e.action of CycleAnimationSpeed => True; _ => False)
+       Nothing => False)
+  check "the palette includes Switch language"
+    (case paletteEntryAt 20 of
        Just e => e.label == "Switch language"
                   && (case e.action of SwitchLanguage => True; _ => False)
        Nothing => False)
+  check "the palette includes Replay browser"
+    (case paletteEntryAt 21 of
+       Just e => e.label == "Replay browser"
+                  && (case e.action of OpenReplayBrowser => True; _ => False)
+       Nothing => False)
   check "the palette includes Save settings"
-    (case paletteEntryAt 20 of
+    (case paletteEntryAt 22 of
        Just e => e.label == "Save settings"
                   && (case e.action of SaveSettings => True; _ => False)
        Nothing => False)
   check "the palette includes Reload settings"
-    (case paletteEntryAt 21 of
+    (case paletteEntryAt 23 of
        Just e => e.label == "Reload settings"
                   && (case e.action of ReloadSettings => True; _ => False)
        Nothing => False)
   check "the palette includes Save and quit"
-    (case paletteEntryAt 22 of
+    (case paletteEntryAt 24 of
        Just e => e.label == "Save and quit"
                   && (case e.action of SaveAndQuit => True; _ => False)
        Nothing => False)
   check "the palette includes Load game"
-    (case paletteEntryAt 23 of
+    (case paletteEntryAt 25 of
        Just e => e.label == "Load game"
                   && (case e.action of LoadGame => True; _ => False)
        Nothing => False)
   check "the palette includes Search for traps"
-    (case paletteEntryAt 24 of
+    (case paletteEntryAt 26 of
        Just e => e.label == "Search for traps"
                   && (case e.action of Do Search => True; _ => False)
        Nothing => False)
   check "the palette includes Quit"
-    (case paletteEntryAt 25 of
+    (case paletteEntryAt 27 of
        Just e => e.label == "Quit"
                   && (case e.action of Quit' => True; _ => False)
        Nothing => False)
@@ -394,6 +440,33 @@ run = do
   let mPaused = fst (update ReplayToggle mPlayback)
   check "the replay timer stops when paused"
     (not (hasReplaySub (subs mPaused)))
+  check "Left seeks the replay backwards"
+    (isSeekBack (key mPlayback (Press KLeft noMods)))
+  check "Right seeks the replay forwards"
+    (isSeekForward (key mPlayback (Press KRight noMods)))
+  check "Home seeks to the start"
+    (isSeekStart (key mPlayback (Press KHome noMods)))
+  check "End seeks to the end"
+    (isSeekEnd (key mPlayback (Press KEnd noMods)))
+  check "F5 is ignored during playback"
+    (isNothing (key mPlayback (Press (KF 5) noMods)))
+
+  check "F5 opens the replay browser"
+    (isOpenBrowser (key mNormal (Press (KF 5) noMods)))
+  let mBrowser : Model
+      mBrowser = { ui := { replayBrowserOpen := True } mNormal.ui } mNormal
+  check "Escape closes the replay browser"
+    (isCloseBrowser (key mBrowser (Press KEscape noMods)))
+  check "j moves down the replay browser"
+    (isBrowserNext (key mBrowser (Press (KChar 'j') noMods)))
+  check "the down arrow moves down the replay browser"
+    (isBrowserNext (key mBrowser (Press KDown noMods)))
+  check "k moves up the replay browser"
+    (isBrowserPrev (key mBrowser (Press (KChar 'k') noMods)))
+  check "Enter plays the selected replay"
+    (isBrowserOpen (key mBrowser (Press KEnter noMods)))
+  check "the browser swallows movement keys"
+    (isNothing (key mBrowser (Press (KChar 'h') noMods)))
 
   let mShare : Model
       mShare = { shareOpen := True } mNormal
@@ -421,7 +494,7 @@ run = do
       gDying = { player := pDying } gStarve
       mDying = MkModel c gDying 80 24 False Nothing Nothing Nothing
                  False False 0 AllMessages (emptyReplay 42)
-                 [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English
+                 [] False False Nothing ClassicCga Nothing [] True Nothing defaultKeymap English defaultUiState
       deadOut = update (Do Wait) mDying
       mDead = fst deadOut
   check "game over auto-opens the score screen"

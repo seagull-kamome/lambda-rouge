@@ -74,6 +74,7 @@ commandMsg Theme = CycleTheme
 commandMsg Animation = ToggleAnimations
 commandMsg Scores = OpenScores
 commandMsg Share = OpenShare
+commandMsg ReplayBrowser = OpenReplayBrowser
 commandMsg Redraw = Redraw
 commandMsg Quit = Quit'
 
@@ -182,17 +183,30 @@ shareKey (Press (KChar 'C') _) = Just CopySeed
 shareKey (Press KEnter _) = Just CopySeed
 shareKey _ = Nothing
 
+replayBrowserKey : Input -> Maybe Msg
+replayBrowserKey (Press KEscape _) = Just CloseReplayBrowser
+replayBrowserKey (Press (KChar 'q') _) = Just CloseReplayBrowser
+replayBrowserKey (Press (KChar 'r') _) = Just OpenReplayBrowser
+replayBrowserKey (Press KUp _) = Just ReplayBrowserPrev
+replayBrowserKey (Press (KChar 'k') _) = Just ReplayBrowserPrev
+replayBrowserKey (Press KDown _) = Just ReplayBrowserNext
+replayBrowserKey (Press (KChar 'j') _) = Just ReplayBrowserNext
+replayBrowserKey (Press KEnter _) = Just ReplayBrowserOpenSelected
+replayBrowserKey _ = Nothing
+
 overlayKey : Model -> Input -> Maybe Msg
 overlayKey m input =
   if m.helpOpen
      then helpKey input
      else if m.paletteOpen
              then paletteKey input
-             else if m.scoreOpen
-                     then scoreKey input
-                     else if m.shareOpen
-                             then shareKey input
-                             else Nothing
+             else if m.ui.replayBrowserOpen
+                     then replayBrowserKey input
+                     else if m.scoreOpen
+                             then scoreKey input
+                             else if m.shareOpen
+                                     then shareKey input
+                                     else Nothing
 
 normalKey : Model -> Input -> Maybe Msg
 normalKey m input =
@@ -220,6 +234,12 @@ playbackKey (Press (KChar '-') _) = Just ReplaySpeedDown
 playbackKey (Press (KChar '_') _) = Just ReplaySpeedDown
 playbackKey (Press (KChar 'r') _) = Just ReplayRestart
 playbackKey (Press (KChar 'R') _) = Just ReplayRestart
+playbackKey (Press KLeft _) = Just ReplaySeekBack
+playbackKey (Press (KChar '<') _) = Just ReplaySeekBack
+playbackKey (Press KRight _) = Just ReplaySeekForward
+playbackKey (Press (KChar '>') _) = Just ReplaySeekForward
+playbackKey (Press KHome _) = Just ReplaySeekStart
+playbackKey (Press KEnd _) = Just ReplaySeekEnd
 playbackKey _ = Nothing
 
 ||| Theme and animation bindings remain global, as F3/F4 were in the
@@ -229,6 +249,10 @@ globalKey m input =
   case commandForInput m input of
     Just Theme => Just CycleTheme
     Just Animation => Just ToggleAnimations
+    Just ReplayBrowser =>
+      case m.playback of
+        Just _ => Nothing
+        Nothing => Just OpenReplayBrowser
     _ => Nothing
 
 isCtrlC : Input -> Bool
@@ -267,5 +291,6 @@ subs m =
   , OnMouse (mouseMsg m)
   ] ++ (if null m.animations
           then []
-          else [Every "animation" 16 AnimationTick])
+          else [Every "animation" (animationDelay m.ui.animationSpeed)
+                    AnimationTick])
     ++ replaySub m

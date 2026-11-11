@@ -18,6 +18,7 @@ import LambdaRogue.Core.Game
 import LambdaRogue.Core.Message
 import LambdaRogue.Core.Replay
 import LambdaRogue.Core.Types
+import LambdaRogue.UI.Animation
 import LambdaRogue.UI.Theme
 import System
 import TermUI.Canvas
@@ -96,7 +97,7 @@ run = do
 
   -- UI text ---------------------------------------------------------------
   check "the UI key table is complete"
-    (length allTextKeys == 165)
+    (length allTextKeys == 173)
   check "the language toggle flips both ways"
     (nextLanguage English == Japanese
      && nextLanguage Japanese == English)
@@ -141,8 +142,8 @@ run = do
   -- Language isolation ----------------------------------------------------
   c <- newCanvas (the Len 80) (the Len 22)
   let m0 = initModel c sampleGame
-      mEn = fst (update (ApplySettings ClassicCga True defaultKeymap English) m0)
-      mJa = fst (update (ApplySettings ClassicCga True defaultKeymap Japanese) m0)
+      mEn = fst (update (ApplySettings ClassicCga True NormalAnimation defaultKeymap English) m0)
+      mJa = fst (update (ApplySettings ClassicCga True NormalAnimation defaultKeymap Japanese) m0)
   check "switching to Japanese updates only the display language"
     (mEn.language == English && mJa.language == Japanese)
   check "switching language cannot change the game digest"

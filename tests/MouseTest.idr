@@ -107,6 +107,26 @@ isClosePalette : Maybe Msg -> Bool
 isClosePalette (Just ClosePalette) = True
 isClosePalette _ = False
 
+isBrowserSelect : Nat -> Maybe Msg -> Bool
+isBrowserSelect n (Just (ReplayBrowserSelect n')) = n == n'
+isBrowserSelect _ _ = False
+
+isBrowserRun : Nat -> Maybe Msg -> Bool
+isBrowserRun n (Just (ReplayBrowserRun n')) = n == n'
+isBrowserRun _ _ = False
+
+isBrowserNext : Maybe Msg -> Bool
+isBrowserNext (Just ReplayBrowserNext) = True
+isBrowserNext _ = False
+
+isBrowserPrev : Maybe Msg -> Bool
+isBrowserPrev (Just ReplayBrowserPrev) = True
+isBrowserPrev _ = False
+
+isCloseBrowser : Maybe Msg -> Bool
+isCloseBrowser (Just CloseReplayBrowser) = True
+isCloseBrowser _ = False
+
 isCloseHelp : Maybe Msg -> Bool
 isCloseHelp (Just CloseHelp) = True
 isCloseHelp _ = False
@@ -226,13 +246,31 @@ run = do
     (isCloseInventory (mouseMsg ({ width := 100, height := 30 } mInv) (leftDown 0 0)))
 
   check "the palette wheel-down and click select a row"
-    (isPaletteSelect 15 (mouseMsg ({ paletteOpen := True } classic) (leftDown 5 17)))
+    (isPaletteSelect 14 (mouseMsg ({ paletteOpen := True } classic) (leftDown 5 17)))
   check "a palette double click runs the row"
-    (isPaletteRun 15 (mouseMsg ({ paletteOpen := True } classic) (leftDouble 5 17)))
+    (isPaletteRun 14 (mouseMsg ({ paletteOpen := True } classic) (leftDouble 5 17)))
   check "the palette wheel moves down"
     (isPaletteNext (mouseMsg ({ paletteOpen := True } classic) (wheelDown 5 10)))
   check "the palette wheel moves up"
     (isPalettePrev (mouseMsg ({ paletteOpen := True } classic) (wheelUp 5 10)))
+  let mBrowser : Model
+      mBrowser = { ui := { replayBrowserOpen := True
+                         , replayFiles := ["a.json", "b.json"]
+                         , replayIndex := 0 } classic.ui } classic
+  check "a click selects a replay browser row"
+    (isBrowserSelect 1 (mouseMsg mBrowser (leftDown 5 3)))
+  check "a double click plays a replay browser row"
+    (isBrowserRun 1 (mouseMsg mBrowser (leftDouble 5 3)))
+  check "the replay browser wheel moves down"
+    (isBrowserNext (mouseMsg mBrowser (wheelDown 5 3)))
+  check "the replay browser wheel moves up"
+    (isBrowserPrev (mouseMsg mBrowser (wheelUp 5 3)))
+  check "a right click closes the replay browser"
+    (isCloseBrowser (mouseMsg mBrowser
+       (MkMouseEvent RightButton ButtonDown 5 3 noMods 1)))
+  check "a click outside the replay browser closes it"
+    (isCloseBrowser (mouseMsg mBrowser (leftDown 0 0)))
+
   check "a click outside the palette closes it"
     (isClosePalette (mouseMsg ({ width := 100, height := 30 } ({ paletteOpen := True } classic)) (leftDown 0 0)))
 

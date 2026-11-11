@@ -406,6 +406,8 @@ data TextKey
   | ReplayBar | ReplaySlow | ReplayNormal | ReplayFast | ReplayComplete
   | ReplayPlaying | ReplayPaused | ReplayVerified | ReplayMismatch
   | ReplayControls
+  | ReplayBrowserTitle | ReplayBrowserEmpty | ReplayBrowserControls
+  | ReplayBrowserError
   | LogAll | LogCombat | LogItems | LogSystem | LogWarnings | NoMessages
   | ZapPrompt | ThrowPrompt
   | Minimap | MinimapYou | MinimapSymbols | MinimapOnlyExplored
@@ -423,7 +425,7 @@ data TextKey
   | HelpHelpPalette | HelpLogThemeAnimation | HelpRedraw | HelpScoresShare
   | HelpQuit | HelpMouse | HelpSymbols | HelpSymbols1 | HelpSymbols2
   | HelpSymbols3 | HelpTactics | HelpSettings | HelpPaletteHint
-  | HelpUnbound | HelpArrows
+  | HelpUnbound | HelpArrows | HelpReplay | HelpAccessibility
   | PaletteTitle | PaletteControls
   | Scores | ScoresSubtitle | ScoreDepth | ScoreLv | ScoreExp | ScoreGold
   | ScoreTurns | ScoreResult | ScoreCause | ResultWon | ResultDead | NoScores
@@ -434,6 +436,7 @@ data TextKey
   | KeysMove | KeysPickUpDescend | KeysReadZapThrow | KeysTakeOffRedrawQuit
   | KeysHelpLogTheme | KeysScoresShare | KeysMouse | HelpMouseLabel
   | MissingSeedValue | InvalidSeedValue | MissingLangValue | InvalidLangValue
+  | MissingThemeValue | InvalidThemeValue
   | TerminalTooSmall | AppAlreadyRunning | AppNeedsTerminal | Bye
 
 uiEn : TextKey -> String
@@ -479,7 +482,11 @@ uiEn ReplayPlaying = "playing"
 uiEn ReplayPaused = "paused"
 uiEn ReplayVerified = "verified"
 uiEn ReplayMismatch = "MISMATCH"
-uiEn ReplayControls = "Space . -/+ R Esc"
+uiEn ReplayControls = "Space . -/+ Left/Right Home/End R Esc"
+uiEn ReplayBrowserTitle = "Replays"
+uiEn ReplayBrowserEmpty = "No saved replays."
+uiEn ReplayBrowserControls = "Up/Down or j/k move   Enter play   r refresh   Esc close"
+uiEn ReplayBrowserError = "Could not load this replay."
 uiEn LogAll = "all"
 uiEn LogCombat = "combat"
 uiEn LogItems = "items"
@@ -543,7 +550,7 @@ uiEn HelpInterface = "Interface"
 uiEn HelpHelpPalette = "help / command palette"
 uiEn HelpLogThemeAnimation = "log / theme / animation"
 uiEn HelpRedraw = "redraw"
-uiEn HelpScoresShare = "scores / share seed"
+uiEn HelpScoresShare = "scores / share seed / replay browser"
 uiEn HelpQuit = "quit"
 uiEn HelpMouse = "click map, inventory, palette"
 uiEn HelpSymbols = "Symbols"
@@ -553,6 +560,10 @@ uiEn HelpSymbols3 = "  $ gold   \" amulet   ^ trap"
 uiEn HelpTactics = "  Bump to attack. The Amulet is on depth 26; return it to depth 1."
 uiEn HelpSettings = "Settings: $XDG_DATA_HOME/lambda-rogue/settings.json"
 uiEn HelpPaletteHint = "Palette: Save settings / Reload settings."
+uiEn HelpReplay =
+  "Replays: F5 lists files; Left/Right seek, Home/End jump, R restarts."
+uiEn HelpAccessibility =
+  "Accessibility: --theme, --no-color, NO_COLOR, NO_MOTION, ASCII glyphs."
 uiEn HelpUnbound = "unbound"
 uiEn HelpArrows = "arrows"
 uiEn PaletteTitle = "Command palette"
@@ -574,7 +585,7 @@ uiEn Verified = "verified"
 uiEn Mismatch = "MISMATCH"
 uiEn ScoreSeed = "Seed: {}"
 uiEn ScoreReplay = "Replay: {}"
-uiEn ScoreControls = "P replays from the start.  Esc, S or Enter closes."
+uiEn ScoreControls = "P replays.  F5 lists saved replays.  Esc, S or Enter closes."
 uiEn ShareTitle = "Share seed"
 uiEn ShareSeed = "Seed: {}"
 uiEn ShareGive = "Give this seed to another player."
@@ -600,6 +611,10 @@ uiEn InvalidSeedValue =
   "invalid --seed value: {} (expected 16 lowercase hex digits)"
 uiEn MissingLangValue = "missing value for --lang (expected en or ja)"
 uiEn InvalidLangValue = "invalid --lang value: {} (expected en or ja)"
+uiEn MissingThemeValue =
+  "missing value for --theme (see README for the theme ids)"
+uiEn InvalidThemeValue =
+  "invalid --theme value: {} (expected classic-cga, modern-dark, amber, green-phosphor, high-contrast, colorblind-safe or monochrome)"
 uiEn TerminalTooSmall = "Terminal too small: need 80x24, have {}x{}"
 uiEn AppAlreadyRunning =
   "lambda-rogue is already running; close that instance first."
@@ -649,7 +664,12 @@ uiJa ReplayPlaying = "再生中"
 uiJa ReplayPaused = "一時停止"
 uiJa ReplayVerified = "検証済み"
 uiJa ReplayMismatch = "不一致"
-uiJa ReplayControls = "Space . -/+ R Esc"
+uiJa ReplayControls = "Space . -/+ ←/→ Home/End R Esc"
+uiJa ReplayBrowserTitle = "リプレイ一覧"
+uiJa ReplayBrowserEmpty = "保存されたリプレイはない。"
+uiJa ReplayBrowserControls =
+  "上下またはj/kで移動   Enterで再生   rで再読込   Escで閉じる"
+uiJa ReplayBrowserError = "このリプレイを読み込めなかった。"
 uiJa LogAll = "すべて"
 uiJa LogCombat = "戦闘"
 uiJa LogItems = "アイテム"
@@ -713,7 +733,7 @@ uiJa HelpInterface = "インターフェース"
 uiJa HelpHelpPalette = "ヘルプ / コマンドパレット"
 uiJa HelpLogThemeAnimation = "ログ / テーマ / アニメーション"
 uiJa HelpRedraw = "再描画"
-uiJa HelpScoresShare = "スコア / シード共有"
+uiJa HelpScoresShare = "スコア / シード共有 / リプレイ一覧"
 uiJa HelpQuit = "終了"
 uiJa HelpMouse = "地図・持ち物・パレットをクリック"
 uiJa HelpSymbols = "記号"
@@ -723,6 +743,10 @@ uiJa HelpSymbols3 = "  $ 金   \" アミュレット   ^ 罠"
 uiJa HelpTactics = "  体当たりで攻撃。アミュレットは26階にあり、1階へ持ち帰れば勝利。"
 uiJa HelpSettings = "設定: $XDG_DATA_HOME/lambda-rogue/settings.json"
 uiJa HelpPaletteHint = "パレット: 設定を保存 / 設定を再読み込み。"
+uiJa HelpReplay =
+  "リプレイ: F5で一覧。←/→でシーク、Home/Endで先頭/末尾、Rで最初から。"
+uiJa HelpAccessibility =
+  "アクセシビリティ: --theme、--no-color、NO_COLOR、NO_MOTION、ASCIIグリフ。"
 uiJa HelpUnbound = "未割り当て"
 uiJa HelpArrows = "矢印キー"
 uiJa PaletteTitle = "コマンドパレット"
@@ -744,7 +768,7 @@ uiJa Verified = "検証済み"
 uiJa Mismatch = "不一致"
 uiJa ScoreSeed = "シード: {}"
 uiJa ScoreReplay = "リプレイ: {}"
-uiJa ScoreControls = "Pで最初から再生。Esc、SまたはEnterで閉じる。"
+uiJa ScoreControls = "Pで再生。F5でリプレイ一覧。Esc、SまたはEnterで閉じる。"
 uiJa ShareTitle = "シードを共有"
 uiJa ShareSeed = "シード: {}"
 uiJa ShareGive = "このシードを他のプレイヤーに渡そう。"
@@ -770,6 +794,10 @@ uiJa InvalidSeedValue =
   "--seed の値が不正: {}（16桁の小文字16進数を指定）"
 uiJa MissingLangValue = "--lang の値がない（en または ja を指定）"
 uiJa InvalidLangValue = "--lang の値が不正: {}（en または ja を指定）"
+uiJa MissingThemeValue =
+  "--theme の値がない（テーマIDを指定）"
+uiJa InvalidThemeValue =
+  "--theme の値が不正: {}（classic-cga, modern-dark, amber, green-phosphor, high-contrast, colorblind-safe, monochrome のいずれか）"
 uiJa TerminalTooSmall = "端末が小さすぎる: 80x24 が必要、現在 {}x{}"
 uiJa AppAlreadyRunning =
   "lambda-rogue はすでに起動している。先にそちらを閉じてほしい。"
@@ -802,7 +830,9 @@ paletteLabel Japanese label =
     "Share seed" => "シードを共有"
     "Cycle theme" => "テーマを切り替え"
     "Toggle animation" => "アニメーション切替"
+    "Cycle animation speed" => "アニメーション速度"
     "Switch language" => "言語を切り替え"
+    "Replay browser" => "リプレイ一覧"
     "Save settings" => "設定を保存"
     "Reload settings" => "設定を再読み込み"
     "Save and quit" => "保存して終了"
@@ -826,6 +856,8 @@ allTextKeys =
   , ReplayBar, ReplaySlow, ReplayNormal, ReplayFast, ReplayComplete
   , ReplayPlaying, ReplayPaused, ReplayVerified, ReplayMismatch
   , ReplayControls
+  , ReplayBrowserTitle, ReplayBrowserEmpty, ReplayBrowserControls
+  , ReplayBrowserError
   , LogAll, LogCombat, LogItems, LogSystem, LogWarnings, NoMessages
   , ZapPrompt, ThrowPrompt
   , Minimap, MinimapYou, MinimapSymbols, MinimapOnlyExplored
@@ -843,7 +875,7 @@ allTextKeys =
   , HelpHelpPalette, HelpLogThemeAnimation, HelpRedraw, HelpScoresShare
   , HelpQuit, HelpMouse, HelpSymbols, HelpSymbols1, HelpSymbols2
   , HelpSymbols3, HelpTactics, HelpSettings, HelpPaletteHint
-  , HelpUnbound, HelpArrows
+  , HelpUnbound, HelpArrows, HelpReplay, HelpAccessibility
   , PaletteTitle, PaletteControls
   , Scores, ScoresSubtitle, ScoreDepth, ScoreLv, ScoreExp, ScoreGold
   , ScoreTurns, ScoreResult, ScoreCause, ResultWon, ResultDead, NoScores
@@ -854,6 +886,7 @@ allTextKeys =
   , KeysMove, KeysPickUpDescend, KeysReadZapThrow, KeysTakeOffRedrawQuit
   , KeysHelpLogTheme, KeysScoresShare, KeysMouse, HelpMouseLabel
   , MissingSeedValue, InvalidSeedValue, MissingLangValue, InvalidLangValue
+  , MissingThemeValue, InvalidThemeValue
   , TerminalTooSmall, AppAlreadyRunning, AppNeedsTerminal, Bye
   ]
 

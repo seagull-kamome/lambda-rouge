@@ -14,6 +14,51 @@ import LambdaRogue.UI.Theme
 
 %default covering
 
+||| How fast effect ticks advance.  This is presentation only; the game,
+||| RNG, turn count and replay are untouched.  Slow gives effects a longer
+||| visible life, fast shortens it.
+public export
+data AnimationSpeed = SlowAnimation | NormalAnimation | FastAnimation
+
+public export
+Eq AnimationSpeed where
+  SlowAnimation == SlowAnimation = True
+  NormalAnimation == NormalAnimation = True
+  FastAnimation == FastAnimation = True
+  _ == _ = False
+
+public export
+Show AnimationSpeed where
+  show SlowAnimation = "slow"
+  show NormalAnimation = "normal"
+  show FastAnimation = "fast"
+
+public export
+animationSpeedId : AnimationSpeed -> String
+animationSpeedId SlowAnimation = "slow"
+animationSpeedId NormalAnimation = "normal"
+animationSpeedId FastAnimation = "fast"
+
+public export
+animationSpeedFromId : String -> Maybe AnimationSpeed
+animationSpeedFromId "slow" = Just SlowAnimation
+animationSpeedFromId "normal" = Just NormalAnimation
+animationSpeedFromId "fast" = Just FastAnimation
+animationSpeedFromId _ = Nothing
+
+||| Milliseconds between effect ticks.
+public export
+animationDelay : AnimationSpeed -> Nat
+animationDelay SlowAnimation = 32
+animationDelay NormalAnimation = 16
+animationDelay FastAnimation = 8
+
+public export
+nextAnimationSpeed : AnimationSpeed -> AnimationSpeed
+nextAnimationSpeed SlowAnimation = NormalAnimation
+nextAnimationSpeed NormalAnimation = FastAnimation
+nextAnimationSpeed FastAnimation = SlowAnimation
+
 ||| The kinds of short effects the map can show.  The glyph and style are
 ||| presentation decisions; the kind only carries what happened.
 public export

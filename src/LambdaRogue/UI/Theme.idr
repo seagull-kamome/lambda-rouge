@@ -17,6 +17,7 @@ data Theme
   | GreenPhosphor
   | HighContrast
   | ColorblindSafe
+  | Monochrome
 
 public export
 Eq Theme where
@@ -26,6 +27,7 @@ Eq Theme where
   GreenPhosphor == GreenPhosphor = True
   HighContrast == HighContrast = True
   ColorblindSafe == ColorblindSafe = True
+  Monochrome == Monochrome = True
   _ == _ = False
 
 public export
@@ -36,6 +38,7 @@ Show Theme where
   show GreenPhosphor = "Green Phosphor"
   show HighContrast = "High Contrast"
   show ColorblindSafe = "Colorblind Safe"
+  show Monochrome = "Monochrome"
 
 ||| The order used by `F3` and the command palette.
 public export
@@ -47,6 +50,7 @@ themes =
   , GreenPhosphor
   , HighContrast
   , ColorblindSafe
+  , Monochrome
   ]
 
 public export
@@ -56,7 +60,8 @@ nextTheme ModernDark = Amber
 nextTheme Amber = GreenPhosphor
 nextTheme GreenPhosphor = HighContrast
 nextTheme HighContrast = ColorblindSafe
-nextTheme ColorblindSafe = ClassicCga
+nextTheme ColorblindSafe = Monochrome
+nextTheme Monochrome = ClassicCga
 
 ||| Stable names for `settings.json`.  These are independent of display
 ||| names and of the order in `themes`.
@@ -68,6 +73,7 @@ themeId Amber = "amber"
 themeId GreenPhosphor = "green-phosphor"
 themeId HighContrast = "high-contrast"
 themeId ColorblindSafe = "colorblind-safe"
+themeId Monochrome = "monochrome"
 
 public export
 themeFromId : String -> Maybe Theme
@@ -77,7 +83,64 @@ themeFromId "amber" = Just Amber
 themeFromId "green-phosphor" = Just GreenPhosphor
 themeFromId "high-contrast" = Just HighContrast
 themeFromId "colorblind-safe" = Just ColorblindSafe
+themeFromId "monochrome" = Just Monochrome
 themeFromId _ = Nothing
+
+||| What the terminal can actually display.  Themes are downgraded rather
+||| than emitting unsupported RGB escapes: `NO_COLOR` selects monochrome,
+||| and a terminal without TrueColor falls back to an ANSI-only theme.
+public export
+data ColourSupport = NoColour | AnsiColour | TrueColour
+
+public export
+Eq ColourSupport where
+  NoColour == NoColour = True
+  AnsiColour == AnsiColour = True
+  TrueColour == TrueColour = True
+  _ == _ = False
+
+public export
+Show ColourSupport where
+  show NoColour = "none"
+  show AnsiColour = "ansi"
+  show TrueColour = "truecolor"
+
+nonEmpty : Maybe String -> Bool
+nonEmpty (Just "") = False
+nonEmpty (Just _) = True
+nonEmpty Nothing = False
+
+||| `NO_COLOR` (any non-empty value) and `TERM=dumb` mean no colour.
+||| `COLORTERM=truecolor` or `24bit` means RGB is safe; everything else
+||| gets the conservative ANSI palette.
+public export
+detectColourSupport : Maybe String -> Maybe String -> Maybe String
+                    -> ColourSupport
+detectColourSupport noColor colorterm term =
+  if nonEmpty noColor || term == Just "dumb"
+     then NoColour
+     else if colorterm == Just "truecolor" || colorterm == Just "24bit"
+             then TrueColour
+             else AnsiColour
+
+||| The usual `prefers-reduced-motion` equivalent for a terminal.  A
+||| non-empty `NO_MOTION` asks for no animation; the startup flag does the
+||| same even when this is unset.
+public export
+detectReducedMotion : Maybe String -> Bool
+detectReducedMotion = nonEmpty
+
+||| Pick a theme the terminal can render.  Monochrome survives every
+||| capability; ANSI-only terminals avoid the RGB themes.
+public export
+themeForSupport : ColourSupport -> Theme -> Theme
+themeForSupport NoColour _ = Monochrome
+themeForSupport AnsiColour Monochrome = Monochrome
+themeForSupport AnsiColour HighContrast = HighContrast
+themeForSupport AnsiColour ColorblindSafe = HighContrast
+themeForSupport AnsiColour ClassicCga = ClassicCga
+themeForSupport AnsiColour _ = ClassicCga
+themeForSupport TrueColour theme = theme
 
 ||| Semantic style slots used by the view and the map.  Keeping this list
 ||| small means a new theme only has to fill in presentation decisions, not
@@ -270,6 +333,32 @@ colorblindStyle TrapRole = boldFg (RGB 230 159 0)
 colorblindStyle PlayerRole = boldFg (RGB 255 255 255)
 colorblindStyle SystemRole = fgColor (RGB 86 180 233) plain
 
+-- No colour at all: shape and attributes carry the hierarchy.  This is the
+-- fallback for `NO_COLOR` and the explicit accessibility theme.
+monoStyle : StyleRole -> Style
+monoStyle BackgroundRole = plain
+monoStyle BodyRole = plain
+monoStyle TitleRole = withAttr Bold plain
+monoStyle HeaderRole = withAttr Bold plain
+monoStyle DimRole = withAttr Dim plain
+monoStyle DimCellRole = withAttr Dim plain
+monoStyle StatusRole = withAttr Inverse plain
+monoStyle DangerRole = withAttr Bold (withAttr Underline plain)
+monoStyle BorderRole = plain
+monoStyle MinimapRole = withAttr Bold plain
+monoStyle RockRole = plain
+monoStyle FloorRole = plain
+monoStyle CorridorRole = withAttr Dim plain
+monoStyle DoorRole = withAttr Bold plain
+monoStyle StairsRole = withAttr Bold plain
+monoStyle MonsterRole = withAttr Bold plain
+monoStyle DetectedMonsterRole = withAttr Underline (withAttr Bold plain)
+monoStyle ItemRole = withAttr Underline plain
+monoStyle DetectedItemRole = withAttr Dim (withAttr Underline plain)
+monoStyle TrapRole = withAttr Bold (withAttr Underline plain)
+monoStyle PlayerRole = withAttr Inverse (withAttr Bold plain)
+monoStyle SystemRole = withAttr Dim plain
+
 public export
 styleFor : Theme -> StyleRole -> Style
 styleFor ClassicCga = classicStyle
@@ -278,6 +367,7 @@ styleFor Amber = amberStyle
 styleFor GreenPhosphor = greenStyle
 styleFor HighContrast = contrastStyle
 styleFor ColorblindSafe = colorblindStyle
+styleFor Monochrome = monoStyle
 
 ||| The style of a Core message under a theme.  This is presentation only;
 ||| the message text and order come from the Core unchanged.

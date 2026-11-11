@@ -35,21 +35,63 @@ isTheme _ = False
 public export
 run : IO ()
 run = do
-  check "there are six themes"
-    (length themes == 6)
+  check "there are seven themes"
+    (length themes == 7)
   check "the theme list has no duplicates"
-    (length (nub themes) == 6)
+    (length (nub themes) == 7)
   check "the theme cycle returns to classic"
-    (nextTheme (nextTheme (nextTheme (nextTheme (nextTheme
-      (nextTheme ClassicCga))))) == ClassicCga)
+    (nextTheme (nextTheme (nextTheme (nextTheme (nextTheme (nextTheme
+      (nextTheme ClassicCga)))))) == ClassicCga)
   check "the theme cycle advances in order"
     (nextTheme ClassicCga == ModernDark
      && nextTheme ModernDark == Amber
      && nextTheme Amber == GreenPhosphor
      && nextTheme GreenPhosphor == HighContrast
-     && nextTheme HighContrast == ColorblindSafe)
+     && nextTheme HighContrast == ColorblindSafe
+     && nextTheme ColorblindSafe == Monochrome)
   check "each theme has a distinct title style"
-    (length (nub (map (\t => styleFor t TitleRole) themes)) == 6)
+    (length (nub (map (\t => styleFor t TitleRole) themes)) == 7)
+
+  check "theme ids round-trip"
+    (all (\t => themeFromId (themeId t) == Just t) themes)
+  check "the monochrome id parses"
+    (themeFromId "monochrome" == Just Monochrome)
+  check "an unknown theme id is rejected"
+    (themeFromId "neon" == Nothing)
+
+  check "NO_COLOR selects monochrome"
+    (detectColourSupport (Just "1") Nothing Nothing == NoColour)
+  check "TERM=dumb selects monochrome"
+    (detectColourSupport Nothing Nothing (Just "dumb") == NoColour)
+  check "COLORTERM=truecolor selects TrueColor"
+    (detectColourSupport Nothing (Just "truecolor") Nothing == TrueColour)
+  check "a plain terminal selects ANSI colour"
+    (detectColourSupport Nothing Nothing (Just "xterm-256color")
+       == AnsiColour)
+  check "NO_COLOR beats COLORTERM"
+    (detectColourSupport (Just "1") (Just "truecolor") Nothing == NoColour)
+  check "an empty NO_COLOR is ignored"
+    (detectColourSupport (Just "") Nothing Nothing == AnsiColour)
+  check "NO_MOTION requests reduced motion"
+    (detectReducedMotion (Just "1") && not (detectReducedMotion Nothing))
+
+  check "no colour forces the monochrome theme"
+    (themeForSupport NoColour ModernDark == Monochrome
+     && themeForSupport NoColour Monochrome == Monochrome)
+  check "an ANSI terminal downgrades an RGB theme"
+    (themeForSupport AnsiColour ModernDark == ClassicCga
+     && themeForSupport AnsiColour Amber == ClassicCga)
+  check "an ANSI terminal keeps ANSI themes"
+    (themeForSupport AnsiColour ClassicCga == ClassicCga
+     && themeForSupport AnsiColour HighContrast == HighContrast)
+  check "TrueColor keeps the requested theme"
+    (themeForSupport TrueColour ModernDark == ModernDark
+     && themeForSupport TrueColour Monochrome == Monochrome)
+  check "the monochrome theme uses attributes only"
+    (styleFor Monochrome BodyRole == plain
+     && styleFor Monochrome TitleRole == withAttr Bold plain
+     && styleFor Monochrome PlayerRole
+          == withAttr Inverse (withAttr Bold plain))
 
   check "classic player style is unchanged"
     (styleFor ClassicCga PlayerRole == playerStyle)

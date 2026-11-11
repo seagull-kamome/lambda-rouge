@@ -45,7 +45,8 @@ $XDG_DATA_HOME/lambda-rogue/       # なければ ~/.local/share/lambda-rogue/
 - `settings.json` はテーマ、アニメーション、言語、キーバインドを持つ。
   セーブ/リプレイの再現性には影響しない。
 - 戦績とリプレイはゲーム終了時に `App.Update.persistRun` が書き込む。
-  戦績は起動時に `Main` が読み込む。リプレイの一覧・選択 UI は未実装。
+  戦績は起動時に `Main` が読み込む。リプレイの一覧・選択 UI は `F5` の
+  `Replay browser` で実装済み。
 - 手動セーブはパレットの `Save and quit`（保存して終了）だけ。
   `Load game` はパレットから `save.json` を読み直す。起動時の自動再開とは別経路。
 
@@ -56,6 +57,7 @@ $XDG_DATA_HOME/lambda-rogue/       # なければ ~/.local/share/lambda-rogue/
   "schema": "lambda-rogue.settings.v1",
   "theme": "classic-cga",
   "animation": true,
+  "animationSpeed": "normal",
   "language": "en",
   "keys": {
     "move-north": ["k", "Up"],
@@ -68,8 +70,18 @@ $XDG_DATA_HOME/lambda-rogue/       # なければ ~/.local/share/lambda-rogue/
 
 - `schema` は必須。一致しないファイルは読み込まない。
 - `theme` は `classic-cga`, `modern-dark`, `amber`, `green-phosphor`,
-  `high-contrast`, `colorblind-safe` の安定 ID。省略時は `classic-cga`。
-- `animation` は Boolean。省略時は `true`。
+  `high-contrast`, `colorblind-safe`, `monochrome` の安定 ID。
+  省略時は `classic-cga`。`--theme <id>` はこの値をその起動だけ上書きする。
+- `animation` は Boolean。省略時は `true`。`--no-animation` と
+  環境変数 `NO_MOTION` はこの値より優先して、その起動だけ無効にする。
+- `animationSpeed` は `slow`, `normal`, `fast` のいずれか。省略時は
+  `normal`。ティック間隔はそれぞれ 32 / 16 / 8 ms。未知の ID は
+  ファイル全体の拒否につながる（既知の値の綴り間違いを黙って
+  既定値にしないため）。
+- 実行環境の色能力は設定ファイルに保存しない。`NO_COLOR` / `TERM=dumb`
+  は `monochrome`、TrueColor 非対応端末は ANSI の
+  `classic-cga` / `high-contrast` へ実行時にフォールバックする。
+  `--no-color` は `NO_COLOR` と同じ扱いで、この起動だけモノクロにする。
 - `language` は `en` または `ja`。省略時は `en`。未知の ID は `en` に
   フォールバックする。`--lang en|ja` はこの値をその起動だけ上書きする。
   言語は表示専用で、`Game`, `Replay`, `gameDigest` には入らない。
@@ -400,7 +412,12 @@ $XDG_DATA_HOME/lambda-rogue/       # なければ ~/.local/share/lambda-rogue/
 - `utcSeconds` は表示・一覧用のメタデータで、リプレイの内容や
   `gameDigest` には含めない。
 - `Persist.Replay.listReplayFiles` は `replays/` 内の
-  `.replay.json` だけを辞書順で返す。一覧・選択 UI は未実装。
+  `.replay.json` だけを辞書順で返す。`F5` のリプレイ一覧はこの結果を
+  新しい順に表示し、選択したファイルを `loadReplayFile` で読み込む。
+  壊れたファイルは一覧にエラーを表示し、ゲームは継続する。
+- 再生位置のシークは保存形式ではなくメモリ内の操作で、`Replay` の
+  `seed` と `commands` から prefix を再実行して状態を作る。
+  ファイルの書き換えや `gameDigest` の変更は行わない。
 - 保存前に `replays/` を作成する。失敗してもゲーム終了処理は継続する。
 
 ### 4.5 メモリ内リプレイと検証

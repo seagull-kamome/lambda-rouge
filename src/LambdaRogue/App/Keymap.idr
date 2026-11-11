@@ -96,6 +96,7 @@ data CommandId
   | Animation
   | Scores
   | Share
+  | ReplayBrowser
   | Redraw
   | Quit
 
@@ -132,6 +133,7 @@ Eq CommandId where
   Animation == Animation = True
   Scores == Scores = True
   Share == Share = True
+  ReplayBrowser == ReplayBrowser = True
   Redraw == Redraw = True
   Quit == Quit = True
   _ == _ = False
@@ -169,6 +171,7 @@ Show CommandId where
   show Animation = "Animation"
   show Scores = "Scores"
   show Share = "Share"
+  show ReplayBrowser = "ReplayBrowser"
   show Redraw = "Redraw"
   show Quit = "Quit"
 
@@ -206,6 +209,7 @@ commandName Theme = "theme"
 commandName Animation = "animation"
 commandName Scores = "scores"
 commandName Share = "share"
+commandName ReplayBrowser = "replay-browser"
 commandName Redraw = "redraw"
 commandName Quit = "quit"
 
@@ -242,6 +246,7 @@ commandFromName "theme" = Just Theme
 commandFromName "animation" = Just Animation
 commandFromName "scores" = Just Scores
 commandFromName "share" = Just Share
+commandFromName "replay-browser" = Just ReplayBrowser
 commandFromName "redraw" = Just Redraw
 commandFromName "quit" = Just Quit
 commandFromName _ = Nothing
@@ -306,6 +311,7 @@ defaultKeymap =
   , MkBinding Animation "Toggle animation" [special (KF 4)]
   , MkBinding Scores "Scores" [ch 'S']
   , MkBinding Share "Share seed" [ctrl 's']
+  , MkBinding ReplayBrowser "Replay browser" [special (KF 5)]
   , MkBinding Redraw "Redraw" [ctrl 'r', ctrl 'l']
   , MkBinding Quit "Quit" [ch 'Q', ctrl 'c']
   ]

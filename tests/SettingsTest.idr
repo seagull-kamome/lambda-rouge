@@ -16,6 +16,7 @@ import LambdaRogue.Core.Game
 import LambdaRogue.Core.Replay
 import LambdaRogue.Core.Types
 import LambdaRogue.Persist.Settings
+import LambdaRogue.UI.Animation
 import LambdaRogue.UI.Theme
 import System
 import System.File
@@ -114,7 +115,7 @@ run = do
 
   let baseSettings : Settings
       baseSettings =
-        MkSettings ModernDark False
+        MkSettings ModernDark False FastAnimation
           (setBindingKeys Help [MkKeyChord (KF 9) noMods] defaultKeymap)
           English
   check "settings text round-trips"
@@ -170,6 +171,27 @@ run = do
   check "a non-boolean animation flag rejects the settings file"
     (isNothing (settingsFromText
       "{\"schema\":\"lambda-rogue.settings.v1\",\"animation\":\"yes\"}"))
+  check "the default animation speed is normal"
+    (defaultSettings.animationSpeed == NormalAnimation)
+  check "settings output stores the animation speed"
+    (isInfixOf (unpack "\"animationSpeed\": \"normal\"")
+               (unpack (settingsToText defaultSettings)))
+  check "a missing animation speed defaults to normal"
+    (case settingsFromText "{\"schema\":\"lambda-rogue.settings.v1\"}" of
+       Just s => s.animationSpeed == NormalAnimation
+       Nothing => False)
+  check "each animation speed round-trips"
+    (all (\sp => settingsFromText
+                   ("{\"schema\":\"lambda-rogue.settings.v1\",\"animationSpeed\":\""
+                    ++ animationSpeedId sp ++ "\"}")
+                 == Just ({ animationSpeed := sp } defaultSettings))
+         [SlowAnimation, NormalAnimation, FastAnimation])
+  check "an unknown animation speed rejects the settings file"
+    (isNothing (settingsFromText
+      "{\"schema\":\"lambda-rogue.settings.v1\",\"animationSpeed\":\"warp\"}"))
+  check "a non-string animation speed rejects the settings file"
+    (isNothing (settingsFromText
+      "{\"schema\":\"lambda-rogue.settings.v1\",\"animationSpeed\":3}"))
   check "an unknown schema rejects the settings file"
     (isNothing (settingsFromText
       "{\"schema\":\"lambda-rogue.settings.v2\"}"))
@@ -213,11 +235,13 @@ run = do
   let applied = fst (update
         (ApplySettings baseSettings.theme
                        baseSettings.animationsEnabled
+                       baseSettings.animationSpeed
                        baseSettings.keymap
                        baseSettings.language) m0)
   check "applying settings changes only presentation state"
     (applied.theme == ModernDark
      && not applied.animationsEnabled
+     && applied.ui.animationSpeed == FastAnimation
      && applied.keymap == baseSettings.keymap)
   check "applying settings keeps the game and replay"
     (gameDigest applied.game == gameDigest m0.game
@@ -226,6 +250,7 @@ run = do
   let appliedJa = fst (update
         (ApplySettings baseSettings.theme
                        baseSettings.animationsEnabled
+                       baseSettings.animationSpeed
                        baseSettings.keymap
                        Japanese) m0)
   check "applying Japanese changes only the display language"

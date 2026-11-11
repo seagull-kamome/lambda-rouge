@@ -104,6 +104,38 @@ run = do
     (case finished.playback of
        Just pb => pb.done && not pb.playing && pb.played == pb.commandCount
        Nothing => False)
+  check "a finished replay verifies its final state"
+    (case finished.playback of
+       Just pb => pb.verified == Just (replayMatches recorded finished.game)
+       Nothing => False)
+
+  let sought = fst (update ReplaySeekForward started)
+  check "seeking forward clamps at the end"
+    (case sought.playback of
+       Just pb => pb.played == length commands && pb.done && not pb.playing
+       Nothing => False)
+  check "seeking forward reaches the recorded state"
+    (gameDigest sought.game == gameDigest manual)
+  check "seeking keeps the recorded replay"
+    (sought.replay.commands == m.replay.commands)
+  let back = fst (update ReplaySeekBack sought)
+  check "seeking back moves ten commands at a time"
+    (case back.playback of
+       Just pb => pb.played == 0 && not pb.done && not pb.playing
+       Nothing => False)
+  let third = fst (update ReplaySeekStart sought)
+  check "seeking to the start rewinds the game"
+    (case third.playback of
+       Just pb => pb.played == 0 && pb.verified == Nothing
+       Nothing => False)
+  check "seek to the start matches a fresh game"
+    (gameDigest third.game == gameDigest g0)
+  let atEnd = fst (update ReplaySeekEnd started)
+  check "End jumps to the last command"
+    (case atEnd.playback of
+       Just pb => pb.played == length commands && pb.done
+                  && pb.verified == Just True
+       Nothing => False)
 
   let closed = fst (update CloseReplay finished)
   check "closing a replay restores the original game"
@@ -115,9 +147,66 @@ run = do
 
   let empty = { replay := emptyReplay seed } m
       emptyStarted = fst (update StartReplay empty)
+  -- A replay opened from the browser during normal play returns to the run.
+  let midRun = { scoreOpen := False } m
+      loadedMid = fst (update (ReplayFileLoaded "mid.json" (Just recorded)) midRun)
+      midClosed = fst (update CloseReplay loadedMid)
+  check "closing a browser replay returns to the interrupted game"
+    (isNothing midClosed.playback
+     && not midClosed.scoreOpen
+     && gameDigest midClosed.game == gameDigest manual)
+  check "closing a browser replay keeps the recorded replay"
+    (midClosed.replay.commands == m.replay.commands)
+
   check "an empty replay starts finished"
     (case emptyStarted.playback of
        Just pb => pb.done && not pb.playing && pb.commandCount == 0
        Nothing => False)
+
+  -- Loaded replays have no recorded final digest, so they start unchecked.
+  let loaded = fst (update (ReplayFileLoaded "run.replay.json" (Just recorded)) m)
+  check "a loaded replay starts unchecked"
+    (case loaded.playback of
+       Just pb => pb.verified == Nothing && pb.played == 0
+       Nothing => False)
+  check "loading a replay closes the browser"
+    (not loaded.ui.replayBrowserOpen)
+  check "a loaded replay keeps its recorded commands"
+    (loaded.replay.commands == recorded.commands)
+  let loadedDone = foldl (\mm, _ => fst (update ReplayStep mm)) loaded
+                         (replicate (length commands) 0)
+  check "a loaded replay verifies when it finishes"
+    (case loadedDone.playback of
+       Just pb => pb.verified == Just True
+       Nothing => False)
+
+  let browserOut = update OpenReplayBrowser m
+      mBrowser = fst browserOut
+  check "opening the browser sets its flag"
+    (mBrowser.ui.replayBrowserOpen && not mBrowser.scoreOpen
+     && mBrowser.ui.replayIndex == 0)
+  let listed = fst (update (ReplayFiles ["b.json", "a.json"]) mBrowser)
+  check "the browser stores the file list"
+    (listed.ui.replayFiles == ["b.json", "a.json"]
+     && listed.ui.replayIndex == 0)
+  let nexted = fst (update ReplayBrowserNext listed)
+  check "the browser moves to the next file"
+    (nexted.ui.replayIndex == 1)
+  let wrapped = fst (update ReplayBrowserNext nexted)
+  check "the browser wraps to the first file"
+    (wrapped.ui.replayIndex == 0)
+  let prevWrapped = fst (update ReplayBrowserPrev wrapped)
+  check "the browser wraps backwards to the last file"
+    (prevWrapped.ui.replayIndex == 1)
+  let selected = fst (update (ReplayBrowserSelect 99) prevWrapped)
+  check "selecting out of range keeps the index"
+    (selected.ui.replayIndex == 1)
+  let failed = fst (update (ReplayFileLoaded "bad.json" Nothing) mBrowser)
+  check "a malformed replay reports an error"
+    (failed.ui.replayError == Just "bad.json"
+     && isNothing failed.playback)
+  let closedBrowser = fst (update CloseReplayBrowser mBrowser)
+  check "closing the browser clears its flag"
+    (not closedBrowser.ui.replayBrowserOpen)
 
   putStrLn "playback tests passed"
