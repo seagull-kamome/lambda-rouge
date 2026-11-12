@@ -61,7 +61,7 @@ export IDRIS2_CFLAGS="-Wno-parentheses-equality"
 ./verify.sh
 ```
 
-This runs a clean build, the full test suite (1003 checks), and a PTY smoke test
+This runs a clean build, the full test suite (1010 checks), and a PTY smoke test
 that starts, draws and quits the executable. Test data is isolated under
 `build/verify-data`; real saves, scores and settings are not touched.
 
@@ -178,8 +178,7 @@ Differences from Rogue 5.4.4 are collected in chapter 17 of
 - Monsters appear with equal probability within a depth band rather than by
   the original table lookup.
 - Monster groups, the monster possession table, ranged bow/throwing attacks,
-  the Orc's greedy AI, Xeroc's object mimicry, and dragon fire reflection are
-  not implemented.
+  Xeroc's object mimicry, and dragon fire reflection are not implemented.
 - Secret doors are generated from a fraction of closed doors; searching
   reveals them as closed doors. The original's exact generation probability
   is unconfirmed.
@@ -198,11 +197,12 @@ M5 slice 3 added theme auto-fallback and `--theme`, animation speed and reduced
 motion, the replay browser with seeking, and accessibility improvements.
 M5 slice 4 added secret doors: a fraction of closed doors now look like walls
 until `Search` reveals them as closed doors, and the searching ring can find
-them during its free search.
+them during its free search. M5 slice 5 gave Orcs their greedy behaviour:
+they prefer visible gold, pick it up, and drop it when killed.
 
 ## Next priorities
 
-1. **Remaining fidelity**: monster groups, ranged attacks, AI, and
+1. **Remaining fidelity**: monster groups, ranged attacks, Xeroc mimicry, and
    scroll/wand/trap details from chapter 17 of `doc/rogue-reference.md`.
 2. **Release work**: fuzzing, performance and packaging.
 

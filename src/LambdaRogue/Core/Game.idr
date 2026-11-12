@@ -1903,6 +1903,63 @@ rangedOrChase m st =
                         else chase m ({ game := g } st)
              else chase m st
 
+goldPileCoords : Depth -> Game -> List Coord
+goldPileCoords depth g =
+  mapMaybe (\i => case i.location of
+                    OnFloor d c => if i.kind == Gold && d == depth
+                                      then Just c
+                                      else Nothing
+                    _ => Nothing)
+           g.items
+
+||| The nearest gold pile the monster can see.  Ties keep the earlier item
+||| in `Game.items`, so the choice is deterministic.
+nearestVisibleGold : Monster -> Game -> Maybe Coord
+nearestVisibleGold m g =
+  let lvl = currentLevel g
+      seen = filter (\c => canSee lvl.tiles m.pos c) (goldPileCoords g.depth g)
+      nearest : Maybe Coord -> List Coord -> Maybe Coord
+      nearest best [] = best
+      nearest Nothing (c :: cs) = nearest (Just c) cs
+      nearest (Just b) (c :: cs) =
+        if chebyshev c m.pos < chebyshev b m.pos
+           then nearest (Just c) cs
+           else nearest (Just b) cs
+  in nearest Nothing seen
+
+||| A greedy monster picks up the gold pile under its feet.
+pickUpGold : Monster -> Step -> Step
+pickUpGold m st =
+  case find (\i => i.kind == Gold
+                   && i.location == OnFloor st.game.depth m.pos)
+            st.game.items of
+    Nothing => st
+    Just it =>
+      let g' : Game
+          g' = { items := map (\i => if i.id == it.id
+                                       then { location := CarriedBy m.id } i
+                                       else i)
+                              st.game.items } st.game
+      in { game := g' } st
+
+||| `Greedy` monsters prefer visible gold over chasing the player.  They
+||| attack an adjacent player first, then walk to the nearest gold pile and
+||| carry it until they die.
+greedyAct : Monster -> Step -> Step
+greedyAct m st =
+  if monsterHasStatus Confused m
+     then randomMove m st
+     else if adjacent m.pos st.game.player.pos
+             then monsterStrike m st
+             else case nearestVisibleGold m st.game of
+                    Nothing => rangedOrChase m st
+                    Just c =>
+                      if c == m.pos
+                         then pickUpGold m st
+                         else case stepToward st.game m.pos c of
+                                Nothing => rangedOrChase m st
+                                Just target => moveMonsterTo m target st
+
 monsterAct : Monster -> Step -> Step
 monsterAct m st =
   if isJust st.game.over
@@ -1923,6 +1980,9 @@ monsterAct m st =
      else if (m.state == Awake || m.state == Chasing)
              && hasAbility Erratic m.kind
              then erraticAct m st
+     else if (m.state == Awake || m.state == Chasing)
+             && hasAbility Greedy m.kind
+             then greedyAct m st
      else case m.state of
             Asleep =>
               let lvl = currentLevel st.game

@@ -3,6 +3,7 @@
 module M5Test
 
 import Data.List
+import Data.Maybe
 import LambdaRogue.Core.Dungeon
 import LambdaRogue.Core.Game
 import LambdaRogue.Core.Geometry
@@ -54,6 +55,19 @@ setMonster m g =
   let lvl : Level
       lvl = { monsters := [m] } (currentLevel g)
   in updateCurrentLevel (const lvl) g
+
+setItems : List Item -> Game -> Game
+setItems xs g = { items := xs } g
+
+monsterOf : Game -> Maybe Monster
+monsterOf g = head' (currentLevel g).monsters
+
+goldAt : Coord -> Game -> Maybe Item
+goldAt c g =
+  find (\i => i.kind == Gold && i.location == OnFloor g.depth c) g.items
+
+itemLocationOf : ItemId -> Game -> Maybe ItemLocation
+itemLocationOf iid g = map (.location) (find (\i => i.id == iid) g.items)
 
 addToPack : List Item -> Game -> Game
 addToPack items g =
@@ -207,6 +221,54 @@ wandTests = do
        Just m => m.hp >= 96 && m.hp <= 99
        Nothing => False)
 
+greedyTests : IO ()
+greedyTests = do
+  let gold = MkItem 600 Gold (OnFloor 1 (MkCoord 14 5)) 25 0 False 0 False
+      orc = MkMonster 1 Orc (MkCoord 10 5) 6 6 Awake []
+      g = setMonster orc (setItems [gold] base)
+      afterMove = (step Wait g).game
+  check "a greedy monster heads for visible gold"
+    (maybe False (\m => m.pos == MkCoord 11 5) (monsterOf afterMove))
+
+  let afterPickup = foldl (\gg, _ => (step Wait gg).game) g (replicate 5 ())
+  check "a greedy monster carries picked-up gold"
+    (itemLocationOf 600 afterPickup == Just (CarriedBy 1))
+  check "picked-up gold leaves the floor"
+    (isNothing (goldAt (MkCoord 14 5) afterPickup))
+
+  let underfoot = MkItem 601 Gold (OnFloor 1 (MkCoord 10 5)) 25 0 False 0 False
+      orcOnGold = MkMonster 2 Orc (MkCoord 10 5) 6 6 Awake []
+      picked = (step Wait (setMonster orcOnGold (setItems [underfoot] base))).game
+  check "a greedy monster picks up gold underfoot"
+    (itemLocationOf 601 picked == Just (CarriedBy 2))
+
+  let adjacentGold = MkItem 602 Gold (OnFloor 1 (MkCoord 5 5)) 25 0 False 0 False
+      orcAdjacent = MkMonster 3 Orc (MkCoord 5 5) 6 6 Awake []
+      attacked = (step Wait (setMonster orcAdjacent (setItems [adjacentGold] base))).game
+  check "a greedy monster still attacks an adjacent player"
+    (maybe False (\i => i.location == OnFloor 1 (MkCoord 5 5))
+       (find (\i => i.id == 602) attacked.items))
+
+  let zombieGold = MkItem 603 Gold (OnFloor 1 (MkCoord 10 5)) 25 0 False 0 False
+      zombie = MkMonster 4 Zombie (MkCoord 10 5) 6 6 Awake []
+      zombieMoved = (step Wait (setMonster zombie (setItems [zombieGold] base))).game
+  check "a non-greedy monster ignores gold underfoot"
+    (itemLocationOf 603 zombieMoved == Just (OnFloor 1 (MkCoord 10 5)))
+
+  let carriedGold = MkItem 604 Gold (CarriedBy 1) 25 0 False 0 False
+      carrying = MkMonster 1 Orc (MkCoord 10 5) 1 1 Asleep []
+      strongPlayer = setPlayerStats
+                       (\p => { pos := MkCoord 9 5, hp := 100, maxHp := 100
+                              , level := 20, strength := 20 } p)
+                       base
+      gCarry = setMonster carrying (setItems [carriedGold] strongPlayer)
+      afterAttack = foldl (\gg, _ => (step (Move E) gg).game) gCarry
+                           (replicate 10 ())
+  check "gold carried by a dead monster drops"
+    (isNothing (monsterOf afterAttack)
+     && any (\i => i.id == 604 && i.location == OnFloor 1 (MkCoord 10 5))
+            afterAttack.items)
+
 public export
 run : IO ()
 run = do
@@ -214,4 +276,5 @@ run = do
   ringTests
   potionTests
   wandTests
+  greedyTests
   putStrLn "m5 tests passed"
