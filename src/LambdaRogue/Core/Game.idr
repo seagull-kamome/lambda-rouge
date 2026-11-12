@@ -731,10 +731,39 @@ revealTrapAt c g =
                           lvl.traps } lvl
   in updateCurrentLevel (const lvl') g
 
+||| Searching a secret door turns it into a closed door, exactly as if the
+||| door had been generated normally.  The player then opens it by walking
+||| into it.
+revealSecretDoorAt : Coord -> Game -> Game
+revealSecretDoorAt c g =
+  let lvl = currentLevel g
+      lvl' : Level
+      lvl' = { tiles := setTile c (Door Closed) lvl.tiles } lvl
+  in updateCurrentLevel (const lvl') g
+
+||| Search the eight neighbouring cells for secret doors.  Each secret
+||| door is found with the same probability as a trap.
+searchDoors : Step -> (Step, Bool)
+searchDoors st0 =
+  let around = map (\d => add st0.game.player.pos (delta d)) directions
+      bound = the Bits64 2 + searchPenalty st0.game.player
+      visit : (Step, Bool) -> Coord -> (Step, Bool)
+      visit (st, found) c =
+        case tileAt (currentLevel st.game).tiles c of
+          Just (Door Secret) =>
+            let (roll', rng') = uniform bound st.game.rng
+                st1 : Step
+                st1 = { game := { rng := rng' } st.game } st
+            in if roll' == 0
+                  then (say SystemMsg FoundSecretDoor
+                          ({ game := revealSecretDoorAt c st1.game } st1), True)
+                  else (st1, found)
+          _ => (st, found)
+  in foldl visit (st0, False) around
+
 ||| Search the eight neighbouring cells.  Each unrevealed trap is found
 ||| with probability 1/2 (1/4 when blind, lower still when hallucinating).
-||| The original's secret doors are not generated yet, so only traps are
-||| revealed here.
+||| Secret doors use the same probability and become closed doors.
 searchTraps : Step -> (Step, Bool)
 searchTraps st0 =
   let around = map (\d => add st0.game.player.pos (delta d)) directions
@@ -757,10 +786,11 @@ searchTraps st0 =
 
 searchArea : Step -> Step
 searchArea st =
-  let (st', found) = searchTraps st
-  in consume (if found
-                 then st'
-                 else say SystemMsg SearchNothing st')
+  let (st1, foundDoor) = searchDoors st
+      (st2, foundTrap) = searchTraps st1
+  in consume (if foundDoor || foundTrap
+                 then st2
+                 else say SystemMsg SearchNothing st2)
 
 playerMove : Dir -> Step -> Step
 playerMove d st =
@@ -2058,8 +2088,9 @@ isMoveCommand _ = False
 ringSearch : Nat -> Step -> Step
 ringSearch Z st = st
 ringSearch (S k) st =
-  let (st', _) = searchTraps st
-  in ringSearch k st'
+  let (st1, _) = searchDoors st
+      (st2, _) = searchTraps st1
+  in ringSearch k st2
 
 ||| A ring of searching performs a free search after each successful move,
 ||| once per worn ring, as in 5.4.4's `domove`.

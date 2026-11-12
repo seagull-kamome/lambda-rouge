@@ -42,6 +42,13 @@ setPlayerStats f g =
 setTraps : List Trap -> Game -> Game
 setTraps ts g = updateCurrentLevel (\l => { traps := ts } l) g
 
+setTileAt : Coord -> Tile -> Game -> Game
+setTileAt c t g =
+  updateCurrentLevel (\l => { tiles := setTile c t l.tiles } l) g
+
+tileAtCoord : Coord -> Game -> Maybe Tile
+tileAtCoord c g = tileAt (currentLevel g).tiles c
+
 setMonster : Monster -> Game -> Game
 setMonster m g =
   let lvl : Level
@@ -109,6 +116,35 @@ searchTests = do
     (hasMessage "You search but find nothing." quiet)
   check "searching an empty area still consumes a turn" quiet.turnConsumed
 
+  let secretGame = { rng := fromSeed 1 }
+                     (setTileAt (MkCoord 5 5) (Door Secret) base)
+      hiddenMove = step (Move E) secretGame
+  check "a hidden secret door blocks movement"
+    (not hiddenMove.turnConsumed
+     && hiddenMove.game.player.pos == secretGame.player.pos
+     && hasMessage "There is a wall there." hiddenMove)
+  check "bumping a secret door leaves it hidden"
+    (tileAtCoord (MkCoord 5 5) hiddenMove.game == Just (Door Secret))
+
+  let secretSearch = step Search secretGame
+  check "search reveals an adjacent secret door as a closed door"
+    (tileAtCoord (MkCoord 5 5) secretSearch.game == Just (Door Closed))
+  check "search reports the secret door"
+    (hasMessage "You found a secret door." secretSearch)
+  check "searching for a secret door consumes a turn"
+    secretSearch.turnConsumed
+
+  let openedSecret = step (Move E) secretSearch.game
+  check "a revealed secret door opens normally"
+    (tileAtCoord (MkCoord 5 5) openedSecret.game == Just (Door Open)
+     && hasMessage "You open the door." openedSecret)
+
+  let farSecret = { rng := fromSeed 1 }
+                    (setTileAt (MkCoord 10 5) (Door Secret) base)
+      farSearch = step Search farSecret
+  check "search leaves distant secret doors hidden"
+    (tileAtCoord (MkCoord 10 5) farSearch.game == Just (Door Secret))
+
 ringTests : IO ()
 ringTests = do
   let ringGame = equipLeft (ringItem 500 RingSearching) base
@@ -124,6 +160,13 @@ ringTests = do
                      (replicate 20 ())
   check "a searching ring does not search while waiting"
     (not (revealedAt (MkCoord 5 5) waited))
+
+  let ringSecret = { rng := fromSeed 1 }
+                     (equipLeft (ringItem 505 RingSearching)
+                       (setTileAt (MkCoord 5 5) (Door Secret) base))
+      movedSecret = step (Move N) ringSecret
+  check "a searching ring reveals an adjacent secret door"
+    (tileAtCoord (MkCoord 5 5) movedSecret.game == Just (Door Closed))
 
 potionTests : IO ()
 potionTests = do

@@ -48,6 +48,10 @@ run = do
     (case cellFor g0 itemPos Floor of
        Just c => c.glyph == '%'
        Nothing => False)
+  check "a secret door is drawn as a wall"
+    (tileGlyph (Door Secret) == '#')
+  check "a secret door uses the wall style"
+    (tileStyle (Door Secret) == tileStyle Rock)
   check "an unexplored monster is not drawn"
     (isNothing (cellFor g0 monsterPos Floor))
   check "an unexplored cell is not in mapCells"

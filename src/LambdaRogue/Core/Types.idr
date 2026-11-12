@@ -141,11 +141,12 @@ walkable (Door Open) = True
 walkable (Stairs _) = True
 walkable _ = False
 
-||| A closed door can be opened by walking into it in M2.
+||| A closed door can be opened by walking into it.  A secret door must
+||| first be found with `Search`, which turns it into a closed door;
+||| until then it behaves like a wall.
 public export
 openable : Tile -> Bool
 openable (Door Closed) = True
-openable (Door Secret) = True
 openable _ = False
 
 ||| The logical map grid: 22 rows of 80 tiles, row-major.

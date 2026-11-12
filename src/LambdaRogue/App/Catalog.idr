@@ -246,7 +246,7 @@ messageTemplatesJa =
   , ("miss-monster", "あなたは{}を外した。")
   , ("hit-monster", "あなたは{}に{}のダメージを与えた。{}")
   , ("kill-monster-plain", "あなたは{}を倒した。")
-  , ("found-secret-door", "隠し扉を見つけた！")
+  , ("found-secret-door", "隠し扉を見つけた。")
   , ("open-door", "扉を開けた。")
   , ("trigger-trap", "{}を作動させてしまった。")
   , ("teleport-fizzles", "テレポートの罠は不発だった。")

@@ -29,7 +29,7 @@ checkAll : String -> (a -> Bool) -> List a -> IO ()
 checkAll name p xs = check name (all p xs)
 
 passable : Tile -> Bool
-passable t = walkable t || openable t
+passable t = walkable t || openable t || t == Door Secret
 
 walkableAt : Grid -> Coord -> Bool
 walkableAt g c = maybe False walkable (tileAt g c)
@@ -247,6 +247,14 @@ run = do
     generated
   checkAll "there are at most three traps"
     (\(_, gl) => length gl.level.traps <= 3) generated
+  check "the generator places secret doors"
+    (any (\(_, gl) => countTile (Door Secret) gl.level.tiles > 0) generated)
+  checkAll "secret doors look like walls to movement"
+    (\(_, gl) =>
+      all (\c => not (tileAt gl.level.tiles c == Just (Door Secret)
+                      && walkableAt gl.level.tiles c))
+          [MkCoord x y | y <- range 0 21, x <- range 0 79])
+    generated
   checkAll "monster IDs are allocated from nextMonsterId"
     (\(_, gl) => all (\m => m.id < gl.nextMonsterId) gl.level.monsters)
     generated

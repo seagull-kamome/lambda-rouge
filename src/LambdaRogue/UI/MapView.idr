@@ -34,7 +34,7 @@ tileGlyph Floor = '.'
 tileGlyph Corridor = ':'
 tileGlyph (Door Open) = '\''
 tileGlyph (Door Closed) = '+'
-tileGlyph (Door Secret) = '+'
+tileGlyph (Door Secret) = '#'
 tileGlyph (Door Locked) = '+'
 tileGlyph (Stairs Up) = '<'
 tileGlyph (Stairs Down) = '>'
@@ -44,6 +44,7 @@ tileStyleIn : Theme -> Tile -> Style
 tileStyleIn t Rock = styleFor t RockRole
 tileStyleIn t Floor = styleFor t FloorRole
 tileStyleIn t Corridor = styleFor t CorridorRole
+tileStyleIn t (Door Secret) = styleFor t RockRole
 tileStyleIn t (Door _) = styleFor t DoorRole
 tileStyleIn t (Stairs _) = styleFor t StairsRole
 

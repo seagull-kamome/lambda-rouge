@@ -174,6 +174,25 @@ removeCoords cs removed =
 walkableAt : Grid -> Coord -> Bool
 walkableAt g c = maybe False walkable (tileAt g c)
 
+||| Turn a fraction of the ordinary doors into secret doors.  A secret
+||| door looks like rock to the player until `Search` reveals it as a
+||| closed door.  Doors are visited in row-major order so the RNG draw
+||| order is stable.
+secretDoorPercent : Int32
+secretDoorPercent = 15
+
+concealDoors : Grid -> Rng -> (Grid, Rng)
+concealDoors g0 rng0 =
+  let doors = [MkCoord x y | y <- range 0 21, x <- range 0 79,
+                             tileAt g0 (MkCoord x y) == Just (Door Closed)]
+      conceal : (Grid, Rng) -> Coord -> (Grid, Rng)
+      conceal (g, rng) c =
+        let (secret, rng') = chance secretDoorPercent rng
+        in if secret
+              then (setTile c (Door Secret) g, rng')
+              else (g, rng')
+  in foldl conceal (g0, rng0) doors
+
 public export
 allWalkableCells : Grid -> List Coord
 allWalkableCells g =
@@ -257,11 +276,12 @@ generateLevel depth nextMonster nextItem g0 =
       occupied2 = occupied1 ++ amuletCells ++ map itemPos items
       trapCandidates = removeCoords (allWalkableCells grid4) occupied2
       (traps, g7) = spawnTraps depth trapCandidates g6
+      (grid5, g8) = concealDoors grid4 g7
       downStairs = if depth < 26 then Just downPos else Nothing
       level : Level
-      level = MkLevel depth grid4 empty rooms monsters traps
+      level = MkLevel depth grid5 empty rooms monsters traps
                        (Just upPos) downStairs
-  in MkGeneratedLevel level (amulets ++ items) g7 nextMonster' nextItem'
+  in MkGeneratedLevel level (amulets ++ items) g8 nextMonster' nextItem'
 
 ||| The hand-built M1 level, kept for presentation tests and as a stable
 ||| fixture for the movement/combat tests.

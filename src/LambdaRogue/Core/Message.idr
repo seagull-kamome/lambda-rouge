@@ -296,7 +296,7 @@ msgEn (HitMonster kind dmg confused) =
   "You hit the " ++ monsterName kind ++ " for " ++ show dmg ++ "."
   ++ (if confused then " The " ++ monsterName kind ++ " looks confused." else "")
 msgEn (KillMonsterPlain kind) = "You kill the " ++ monsterName kind ++ "."
-msgEn FoundSecretDoor = "You found a secret door!"
+msgEn FoundSecretDoor = "You found a secret door."
 msgEn OpenDoor = "You open the door."
 msgEn (TriggerTrap kind) = "You trigger a " ++ show kind ++ "."
 msgEn TeleportFizzles = "The teleport trap fizzles."

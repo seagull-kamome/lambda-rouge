@@ -61,7 +61,7 @@ export IDRIS2_CFLAGS="-Wno-parentheses-equality"
 ./verify.sh
 ```
 
-This runs a clean build, the full test suite (991 checks), and a PTY smoke test
+This runs a clean build, the full test suite (1003 checks), and a PTY smoke test
 that starts, draws and quits the executable. Test data is isolated under
 `build/verify-data`; real saves, scores and settings are not touched.
 
@@ -112,7 +112,7 @@ Example `settings.json`:
 | `h` `j` `k` `l` / arrows | Move west, south, north, east (attack a monster) |
 | `y` `u` `b` `n` | Move diagonally |
 | `.` / `5` | Wait one turn |
-| `s` | Search the surroundings for traps |
+| `s` | Search the surroundings for traps and secret doors |
 | `,` | Pick up an item underfoot |
 | `>` / `<` | Descend / ascend stairs |
 | `i` | Inventory |
@@ -180,7 +180,9 @@ Differences from Rogue 5.4.4 are collected in chapter 17 of
 - Monster groups, the monster possession table, ranged bow/throwing attacks,
   the Orc's greedy AI, Xeroc's object mimicry, and dragon fire reflection are
   not implemented.
-- Secret doors are not generated, so searching only reveals traps.
+- Secret doors are generated from a fraction of closed doors; searching
+  reveals them as closed doors. The original's exact generation probability
+  is unconfirmed.
 - Some potion durations, scroll targets and secondary wand effects are
   simplified.
 - Fainting from hunger, death at `-850`, and levitation's trap immunity are not
@@ -194,10 +196,13 @@ their stored English text. It also added the palette language switch,
 cell-width-aligned columns for double-width text, and the score cause column.
 M5 slice 3 added theme auto-fallback and `--theme`, animation speed and reduced
 motion, the replay browser with seeking, and accessibility improvements.
+M5 slice 4 added secret doors: a fraction of closed doors now look like walls
+until `Search` reveals them as closed doors, and the searching ring can find
+them during its free search.
 
 ## Next priorities
 
-1. **Remaining fidelity**: secret doors, groups, ranged attacks, AI, and
+1. **Remaining fidelity**: monster groups, ranged attacks, AI, and
    scroll/wand/trap details from chapter 17 of `doc/rogue-reference.md`.
 2. **Release work**: fuzzing, performance and packaging.
 

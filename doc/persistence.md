@@ -1,9 +1,9 @@
 # lambda-rogue 永続化・リプレイ設計
 
-- Status: Draft 0.9（M5 スライス 2 の言語設定とメッセージ `key` / `args` を反映）
-- Date: 2026-11-10
+- Status: Draft 0.10（M5 スライス 4 の秘密のドアを反映。永続化形式の変更なし）
+- Date: 2026-11-12
 - 対象: `LambdaRogue.Persist.*`, `LambdaRogue.Core.Replay`
-- 前提: `doc/design.md` Draft 1.11, `doc/core-api.md` Draft 1.8
+- 前提: `doc/design.md` Draft 1.14, `doc/core-api.md` Draft 1.9
 
 ## 1. 方針
 
