@@ -4,6 +4,7 @@ module M5Test
 
 import Data.List
 import Data.Maybe
+import LambdaRogue.Core.Bitset
 import LambdaRogue.Core.Dungeon
 import LambdaRogue.Core.Game
 import LambdaRogue.Core.Geometry
@@ -220,6 +221,19 @@ wandTests = do
     (case find (\m => m.id == 1) (currentLevel out.game).monsters of
        Just m => m.hp >= 96 && m.hp <= 99
        Nothing => False)
+
+  let dark : Game
+      dark = updateCurrentLevel
+               (\l => { explored := the Bitset empty } l) base
+      lit = step (Zap 504 N) (addToPack [wand 504 WandLight 5] dark)
+  check "a wand of light reveals the current room"
+    (getBit 4 5 (currentLevel lit.game).explored
+     && getBit 5 5 (currentLevel lit.game).explored)
+  check "a wand of light leaves other rooms and corridors dark"
+    (not (getBit 35 5 (currentLevel lit.game).explored)
+     && not (getBit 25 5 (currentLevel lit.game).explored))
+  check "a wand of light mentions the room"
+    (hasMessageContaining "room" lit)
 
 greedyTests : IO ()
 greedyTests = do

@@ -311,8 +311,9 @@ wandTests = do
     (maybe False (\i => i.charges == 4) (findPackItem outLight.game 400))
   check "zapping identifies the wand kind"
     (elem (Wand WandLight) outLight.game.knownKinds)
-  check "the light wand reveals the map"
-    (count (currentLevel outLight.game).explored == 1760)
+  check "the light wand reveals only the current room"
+    (count (currentLevel outLight.game).explored == 220
+     && not (getBit 35 5 (currentLevel outLight.game).explored))
 
   let damageWand : WandKind -> ItemId -> String -> IO ()
       damageWand k iid label = do

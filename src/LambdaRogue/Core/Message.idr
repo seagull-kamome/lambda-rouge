@@ -368,7 +368,7 @@ msgEn (ArmorFeelsProtected name) = "Your " ++ name ++ " feels protected."
 msgEn CannotRead = "You cannot read that."
 msgEn (ReadScroll name) = "You read the " ++ name ++ "."
 msgEn BeamFizzles = "The beam fizzles."
-msgEn WandFloodsLight = "The wand floods the level with light."
+msgEn WandFloodsLight = "The wand floods the room with light."
 msgEn FadeOutOfSight = "You fade out of sight."
 msgEn (MonsterPolymorphs old new) =
   "The " ++ monsterName old ++ " becomes a " ++ monsterName new ++ "!"

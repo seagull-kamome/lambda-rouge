@@ -339,6 +339,25 @@ revealMap : Game -> Game
 revealMap g =
   updateCurrentLevel (\l => { explored := fullMapBits } l) g
 
+roomAt : Level -> Coord -> Maybe Room
+roomAt lvl (MkCoord x y) =
+  find (\r => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h)
+       lvl.rooms
+
+||| A wand of light maps only the room the player is standing in, including
+||| its wall border.  In a corridor there is no room to light.
+revealRoom : Game -> Game
+revealRoom g =
+  case roomAt (currentLevel g) g.player.pos of
+    Nothing => g
+    Just r =>
+      let lit = [MkCoord x y | x <- range (r.x - 1) (r.x + r.w),
+                               y <- range (r.y - 1) (r.y + r.h),
+                               inBounds (MkCoord x y)]
+          explored' = foldl (\bs, c => setBit c.x c.y bs)
+                            (currentLevel g).explored lit
+      in updateCurrentLevel (\l => { explored := explored' } l) g
+
 visibleMonsters : Game -> List Monster
 visibleMonsters g =
   filter (\m => getBit m.pos.x m.pos.y g.visible)
@@ -1253,7 +1272,7 @@ zapDamage n sides lead dir st =
 applyWand : WandKind -> Dir -> Step -> Step
 applyWand WandLight dir st =
   say ItemMsg WandFloodsLight
-    ({ game := revealMap st.game } st)
+    ({ game := revealRoom st.game } st)
 applyWand WandInvisibility dir st =
   let p : Player
       p = addStatus Invisible 20 st.game.player

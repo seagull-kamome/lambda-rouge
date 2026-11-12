@@ -1,9 +1,9 @@
 # lambda-rogue 永続化・リプレイ設計
 
-- Status: Draft 0.11（M5 スライス 5 の Orc の強欲 AI を反映。永続化形式の変更なし）
+- Status: Draft 0.12（M5 スライス 6 の杖の light を反映。永続化形式の変更なし）
 - Date: 2026-11-12
 - 対象: `LambdaRogue.Persist.*`, `LambdaRogue.Core.Replay`
-- 前提: `doc/design.md` Draft 1.15, `doc/core-api.md` Draft 1.10
+- 前提: `doc/design.md` Draft 1.16, `doc/core-api.md` Draft 1.11
 
 ## 1. 方針
 

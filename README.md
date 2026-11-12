@@ -61,7 +61,7 @@ export IDRIS2_CFLAGS="-Wno-parentheses-equality"
 ./verify.sh
 ```
 
-This runs a clean build, the full test suite (1010 checks), and a PTY smoke test
+This runs a clean build, the full test suite (1013 checks), and a PTY smoke test
 that starts, draws and quits the executable. Test data is isolated under
 `build/verify-data`; real saves, scores and settings are not touched.
 
@@ -198,7 +198,8 @@ motion, the replay browser with seeking, and accessibility improvements.
 M5 slice 4 added secret doors: a fraction of closed doors now look like walls
 until `Search` reveals them as closed doors, and the searching ring can find
 them during its free search. M5 slice 5 gave Orcs their greedy behaviour:
-they prefer visible gold, pick it up, and drop it when killed.
+they prefer visible gold, pick it up, and drop it when killed. M5 slice 6
+limited the wand of light to the current room instead of the whole level.
 
 ## Next priorities
 

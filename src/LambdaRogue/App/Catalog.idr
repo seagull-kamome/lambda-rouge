@@ -316,7 +316,7 @@ messageTemplatesJa =
   , ("cannot-read", "それは読めない。")
   , ("read-scroll", "{}を読んだ。")
   , ("beam-fizzles", "光線は不発に終わった。")
-  , ("wand-floods-light", "杖が階全体を光で満たした。")
+  , ("wand-floods-light", "杖が部屋を光で満たした。")
   , ("fade-out-of-sight", "姿が見えなくなった。")
   , ("monster-polymorphs", "{}は{}になった！")
   , ("monster-speeds-up", "{}は速くなった！")
