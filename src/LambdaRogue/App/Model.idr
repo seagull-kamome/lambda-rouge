@@ -199,10 +199,11 @@ record PaletteEntry where
 public export
 paletteEntries : List PaletteEntry
 paletteEntries =
-  [ MkPaletteEntry "Inventory" "i" OpenInventory (Just Inventory)
-  , MkPaletteEntry "Help" "?" OpenHelp (Just Help)
-  , MkPaletteEntry "Wait one turn" "." (Do Wait) (Just Wait)
+  [ -- Game actions, most frequent first.
+    MkPaletteEntry "Inventory" "i" OpenInventory (Just Inventory)
   , MkPaletteEntry "Pick up" "," (Do PickUp) (Just PickUp)
+  , MkPaletteEntry "Search for traps" "s" (Do Search) (Just Search)
+  , MkPaletteEntry "Wait one turn" "." (Do Wait) (Just Wait)
   , MkPaletteEntry "Descend stairs" ">" (Do Descend) (Just Descend)
   , MkPaletteEntry "Ascend stairs" "<" (Do Ascend) (Just Ascend)
   , MkPaletteEntry "Read a scroll" "r" (OpenInventoryFor ReadAction) (Just Read)
@@ -213,19 +214,22 @@ paletteEntries =
   , MkPaletteEntry "Put on a ring" "P" (OpenInventoryFor PutOnAction) (Just PutOnRing)
   , MkPaletteEntry "Take off an item" "R" (OpenInventoryFor TakeOffAction) (Just TakeOff)
   , MkPaletteEntry "Drop an item" "d" (OpenInventoryFor DropAction) (Just Drop)
-  , MkPaletteEntry "Cycle log filter" "F2" CycleLogFilter (Just LogFilter)
+    -- Views and information.
+  , MkPaletteEntry "Help" "?" OpenHelp (Just Help)
   , MkPaletteEntry "Scores" "S" OpenScores (Just Scores)
   , MkPaletteEntry "Share seed" "Ctrl-S" OpenShare (Just Share)
+  , MkPaletteEntry "Replay browser" "F5" OpenReplayBrowser (Just ReplayBrowser)
+  , MkPaletteEntry "Cycle log filter" "F2" CycleLogFilter (Just LogFilter)
+    -- Display settings.
   , MkPaletteEntry "Cycle theme" "F3" CycleTheme (Just Theme)
   , MkPaletteEntry "Toggle animation" "F4" ToggleAnimations (Just Animation)
   , MkPaletteEntry "Cycle animation speed" "" CycleAnimationSpeed Nothing
   , MkPaletteEntry "Switch language" "ja" SwitchLanguage Nothing
-  , MkPaletteEntry "Replay browser" "F5" OpenReplayBrowser (Just ReplayBrowser)
+    -- Persistence and session.
   , MkPaletteEntry "Save settings" "" SaveSettings Nothing
   , MkPaletteEntry "Reload settings" "" ReloadSettings Nothing
   , MkPaletteEntry "Save and quit" "" SaveAndQuit Nothing
   , MkPaletteEntry "Load game" "" LoadGame Nothing
-  , MkPaletteEntry "Search for traps" "s" (Do Search) (Just Search)
   , MkPaletteEntry "Quit" "Q" Quit' (Just Quit)
   ]
 

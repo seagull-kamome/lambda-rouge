@@ -239,7 +239,7 @@ run = do
   check "the wide palette keeps its controls visible"
     (any (\l => contains "Enter run" l) widePalette)
   check "the palette marks the selected entry"
-    (any (\l => contains "> Wait one turn" l) paletteScreen)
+    (any (\l => contains "> Search for traps" l) paletteScreen)
   check "the palette shows its key hints"
     (any (\l => contains "Enter run" l) paletteScreen)
 

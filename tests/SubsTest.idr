@@ -13,6 +13,7 @@ import LambdaRogue.Core.Types
 import LambdaRogue.UI.Animation
 import LambdaRogue.UI.Theme
 import Data.Maybe
+import Data.List
 import System
 import TermUI.Canvas
 import TermUI.Input
@@ -177,6 +178,10 @@ hasReplaySub : List (Sub Msg) -> Bool
 hasReplaySub [] = False
 hasReplaySub (Every "replay" _ ReplayTick :: _) = True
 hasReplaySub (_ :: rest) = hasReplaySub rest
+
+hasPaletteEntry : String -> (Msg -> Bool) -> Bool
+hasPaletteEntry label p =
+  any (\e => e.label == label && p e.action) paletteEntries
 
 public export
 run : IO ()
@@ -349,68 +354,50 @@ run = do
     (isShare (key mNormal (Press (KChar 's') (MkMods False True False))))
   check "the palette has 28 entries"
     (paletteCount == 28)
-  check "the palette includes Scores"
-    (case paletteEntryAt 15 of
-       Just e => e.label == "Scores"
-                  && (case e.action of OpenScores => True; _ => False)
-       Nothing => False)
-  check "the palette includes Share seed"
-    (case paletteEntryAt 16 of
-       Just e => e.label == "Share seed"
-                  && (case e.action of OpenShare => True; _ => False)
-       Nothing => False)
-  check "the palette includes Cycle theme"
-    (case paletteEntryAt 17 of
-       Just e => e.label == "Cycle theme"
-                  && (case e.action of CycleTheme => True; _ => False)
-       Nothing => False)
-  check "the palette includes Toggle animation"
-    (case paletteEntryAt 18 of
-       Just e => e.label == "Toggle animation"
-                  && (case e.action of ToggleAnimations => True; _ => False)
-       Nothing => False)
-  check "the palette includes Cycle animation speed"
-    (case paletteEntryAt 19 of
-       Just e => e.label == "Cycle animation speed"
-                  && (case e.action of CycleAnimationSpeed => True; _ => False)
-       Nothing => False)
-  check "the palette includes Switch language"
-    (case paletteEntryAt 20 of
-       Just e => e.label == "Switch language"
-                  && (case e.action of SwitchLanguage => True; _ => False)
-       Nothing => False)
-  check "the palette includes Replay browser"
-    (case paletteEntryAt 21 of
-       Just e => e.label == "Replay browser"
-                  && (case e.action of OpenReplayBrowser => True; _ => False)
-       Nothing => False)
-  check "the palette includes Save settings"
-    (case paletteEntryAt 22 of
-       Just e => e.label == "Save settings"
-                  && (case e.action of SaveSettings => True; _ => False)
-       Nothing => False)
-  check "the palette includes Reload settings"
-    (case paletteEntryAt 23 of
-       Just e => e.label == "Reload settings"
-                  && (case e.action of ReloadSettings => True; _ => False)
-       Nothing => False)
-  check "the palette includes Save and quit"
-    (case paletteEntryAt 24 of
-       Just e => e.label == "Save and quit"
-                  && (case e.action of SaveAndQuit => True; _ => False)
-       Nothing => False)
-  check "the palette includes Load game"
-    (case paletteEntryAt 25 of
-       Just e => e.label == "Load game"
-                  && (case e.action of LoadGame => True; _ => False)
-       Nothing => False)
-  check "the palette includes Search for traps"
-    (case paletteEntryAt 26 of
+  check "game actions lead the palette"
+    (map (.label) (Data.List.take 6 paletteEntries)
+       == [ "Inventory", "Pick up", "Search for traps", "Wait one turn"
+          , "Descend stairs", "Ascend stairs" ])
+  check "Search for traps is near the top"
+    (case paletteEntryAt 2 of
        Just e => e.label == "Search for traps"
                   && (case e.action of Do Search => True; _ => False)
        Nothing => False)
-  check "the palette includes Quit"
-    (case paletteEntryAt 27 of
+  check "the palette includes Scores"
+    (hasPaletteEntry "Scores"
+      (\m => case m of OpenScores => True; _ => False))
+  check "the palette includes Share seed"
+    (hasPaletteEntry "Share seed"
+      (\m => case m of OpenShare => True; _ => False))
+  check "the palette includes Cycle theme"
+    (hasPaletteEntry "Cycle theme"
+      (\m => case m of CycleTheme => True; _ => False))
+  check "the palette includes Toggle animation"
+    (hasPaletteEntry "Toggle animation"
+      (\m => case m of ToggleAnimations => True; _ => False))
+  check "the palette includes Cycle animation speed"
+    (hasPaletteEntry "Cycle animation speed"
+      (\m => case m of CycleAnimationSpeed => True; _ => False))
+  check "the palette includes Switch language"
+    (hasPaletteEntry "Switch language"
+      (\m => case m of SwitchLanguage => True; _ => False))
+  check "the palette includes Replay browser"
+    (hasPaletteEntry "Replay browser"
+      (\m => case m of OpenReplayBrowser => True; _ => False))
+  check "the palette includes Save settings"
+    (hasPaletteEntry "Save settings"
+      (\m => case m of SaveSettings => True; _ => False))
+  check "the palette includes Reload settings"
+    (hasPaletteEntry "Reload settings"
+      (\m => case m of ReloadSettings => True; _ => False))
+  check "the palette includes Save and quit"
+    (hasPaletteEntry "Save and quit"
+      (\m => case m of SaveAndQuit => True; _ => False))
+  check "the palette includes Load game"
+    (hasPaletteEntry "Load game"
+      (\m => case m of LoadGame => True; _ => False))
+  check "Quit is the last palette entry"
+    (case paletteEntryAt (minus paletteCount 1) of
        Just e => e.label == "Quit"
                   && (case e.action of Quit' => True; _ => False)
        Nothing => False)
