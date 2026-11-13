@@ -61,7 +61,7 @@ statusKindFromText s =
        [ Confused, Blinded, Hasted, SeeInvisible, DetectMonsters
        , DetectFood, DetectMagic, Invisible, Poisoned, Held, Slowed
        , Paralyzed, Scared, Sleeping, Hallucinating, Levitated
-       , ConfuseNext
+       , ConfuseNext, Mimicking
        ]
 
 public export

@@ -75,6 +75,7 @@ statusName Japanese Sleeping = "睡眠"
 statusName Japanese Hallucinating = "幻覚"
 statusName Japanese Levitated = "浮遊"
 statusName Japanese ConfuseNext = "混乱付与"
+statusName Japanese Mimicking = "物体擬態"
 
 public export
 hungerName : Language -> HungerState -> String

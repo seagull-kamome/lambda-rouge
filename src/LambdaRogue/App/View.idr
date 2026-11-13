@@ -167,9 +167,10 @@ monsterLine : Model -> String
 monsterLine m =
   let g = m.game
   in
-  let ms = filter (\m => not (hasAbility Invisible m.kind)
-                         || playerSeesInvisible g
-                         || adjacent m.pos g.player.pos)
+  let ms = filter (\m => not (isMimicking m)
+                         && (not (hasAbility Invisible m.kind)
+                             || playerSeesInvisible g
+                             || adjacent m.pos g.player.pos))
                   (currentLevel g).monsters
   in case ms of
        [] => t m MonstersNone

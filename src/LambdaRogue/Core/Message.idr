@@ -246,6 +246,7 @@ statusExpiryEn Sleeping = "You wake up."
 statusExpiryEn Hallucinating = "Everything looks normal again."
 statusExpiryEn Levitated = "You float gently back to the floor."
 statusExpiryEn ConfuseNext = "Your hands stop glowing."
+statusExpiryEn Mimicking = "Your disguise slips."
 
 leadArg : AttackLead -> String
 leadArg NoLead = "none"

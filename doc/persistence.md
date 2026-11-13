@@ -1,9 +1,9 @@
 # lambda-rogue 永続化・リプレイ設計
 
-- Status: Draft 0.12（M5 スライス 6 の杖の light を反映。永続化形式の変更なし）
-- Date: 2026-11-12
+- Status: Draft 0.13（M5 スライス 7 の Xeroc の物体擬態を反映。永続化形式の変更なし）
+- Date: 2026-11-13
 - 対象: `LambdaRogue.Persist.*`, `LambdaRogue.Core.Replay`
-- 前提: `doc/design.md` Draft 1.16, `doc/core-api.md` Draft 1.11
+- 前提: `doc/design.md` Draft 1.17, `doc/core-api.md` Draft 1.12
 
 ## 1. 方針
 
@@ -248,7 +248,8 @@ $XDG_DATA_HOME/lambda-rogue/       # なければ ~/.local/share/lambda-rogue/
 - `weaponDice`, `weaponSides`, `weaponBonus`: 装備武器の展開値。
 - `ringArmor`, `ringDamage`, `ringAccuracy`, `ringStrength`: 指輪の常時補正。
 - `statuses`: `{ "kind": StatusKind, "remaining": Int }`。
-  `kind` は Idris の構築子名（`Confused`, `Poisoned`, `Sleeping` など）。
+  `kind` は `show StatusKind` の安定文字列（`confused`, `poisoned`,
+  `sleeping`, `mimicking an object` など）。
   同じ `kind` を重複させず、`remaining >= 0`。
 
 ### 3.5 タイル文字コード
@@ -297,6 +298,8 @@ $XDG_DATA_HOME/lambda-rogue/       # なければ ~/.local/share/lambda-rogue/
 - `hp`, `maxHp`: `hp <= maxHp`。
 - `state`: `"asleep"`, `"awake"`, `"chasing"`, `"fleeing"` のいずれか。
 - `statuses`: `player.statuses` と同じ形式。同じ `kind` を重複させない。
+- `mimicking an object` は `MimicObject` を持つ Xeroc だけが持てる。
+  古いセーブにこの状態がなければ、擬態なしとして復元する。
 
 ### 3.7 `items[]`
 

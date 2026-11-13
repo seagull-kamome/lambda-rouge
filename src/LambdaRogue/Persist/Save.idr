@@ -18,6 +18,7 @@ import Data.String.RC2
 import Data.Vect
 import Language.JSON
 import LambdaRogue.Core.Bitset
+import LambdaRogue.Core.Monster
 import LambdaRogue.Core.Rng
 import LambdaRogue.Core.Types
 import LambdaRogue.Persist.Codec
@@ -362,6 +363,7 @@ validPlayer g =
      && all inPack p.inventory
      && all (\m => maybe True inPack m) equipped
      && validStatuses p.statuses
+     && not (any (\s => s.statusKind == Mimicking) p.statuses)
 
 validLevels : Game -> Bool
 validLevels g =
@@ -372,7 +374,10 @@ validLevels g =
      && all (\d => d >= 1 && d <= 26) depths
      && found g.depth
      && all (\l => all (\m => m.hp <= m.maxHp) l.monsters
-                && all (\m => validStatuses m.statuses) l.monsters) g.levels
+                && all (\m => validStatuses m.statuses) l.monsters
+                && all (\m => not (isMimicking m)
+                               || hasAbility MimicObject m.kind) l.monsters)
+             g.levels
 
 validItems : Game -> Bool
 validItems g =

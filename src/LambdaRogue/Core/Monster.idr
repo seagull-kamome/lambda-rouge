@@ -160,6 +160,43 @@ public export
 hasAbility : MonsterAbility -> MonsterKind -> Bool
 hasAbility a k = elem a (monsterSpec k).abilities
 
+||| True while the monster is hiding as an object.  The status is set at
+||| spawn for `MimicObject` kinds and removed as soon as the monster acts
+||| or is attacked.
+public export
+isMimicking : Monster -> Bool
+isMimicking m = any (\s => s.statusKind == Mimicking) m.statuses
+
+||| The objects a xeroc can resemble.  Each class contributes its classic
+||| glyph, so the disguise is visually indistinguishable from floor loot.
+public export
+mimicKinds : List ItemKind
+mimicKinds =
+  [ Food FoodRation
+  , Potion PotionHealing
+  , Scroll ScrollTeleportation
+  , Wand WandLight
+  , Ring RingProtection
+  , Weapon Dagger
+  , Armor LeatherArmor
+  , Gold
+  ]
+
+||| Choose a disguise from the monster's id.  Ids are allocated
+||| deterministically, so this needs no RNG and survives save/load.
+public export
+mimicKindFor : MonsterId -> ItemKind
+mimicKindFor mid =
+  case mid `mod` 8 of
+    0 => Food FoodRation
+    1 => Potion PotionHealing
+    2 => Scroll ScrollTeleportation
+    3 => Wand WandLight
+    4 => Ring RingProtection
+    5 => Weapon Dagger
+    6 => Armor LeatherArmor
+    _ => Gold
+
 ||| Monster order used by the 5.4.4 spawn bands: weakest first.  The
 ||| threshold-shaped bands are the depths at which a kind appears.
 public export
@@ -240,8 +277,12 @@ spawnMonsters depth candidates nextId g0 =
                  (asleep, g4) = chance sleepChance g3
                  state : MonsterState
                  state = if asleep then Asleep else Awake
+                 statuses : List Status
+                 statuses = if hasAbility MimicObject kind
+                               then [MkStatus Mimicking 1]
+                               else []
                  m : Monster
-                 m = MkMonster nextId kind c hp hp state []
+                 m = MkMonster nextId kind c hp hp state statuses
                  cs' = filter (/= c) cs
              in go k cs' (nextId + 1) g4 (m :: acc)
            _ => (reverse acc, nextId, g2)

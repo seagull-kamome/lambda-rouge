@@ -327,6 +327,7 @@ data StatusKind
   | Hallucinating
   | Levitated
   | ConfuseNext
+  | Mimicking
 
 public export
 Eq StatusKind where
@@ -347,6 +348,7 @@ Eq StatusKind where
   Hallucinating == Hallucinating = True
   Levitated == Levitated = True
   ConfuseNext == ConfuseNext = True
+  Mimicking == Mimicking = True
   _ == _ = False
 
 public export
@@ -368,6 +370,7 @@ Show StatusKind where
   show Hallucinating = "hallucinating"
   show Levitated = "levitated"
   show ConfuseNext = "confusing hands"
+  show Mimicking = "mimicking an object"
 
 public export
 record Status where

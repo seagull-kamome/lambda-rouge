@@ -6,6 +6,7 @@ import Data.Maybe
 import LambdaRogue.Core.Bitset
 import LambdaRogue.Core.Dungeon
 import LambdaRogue.Core.Fov
+import LambdaRogue.Core.Monster
 import LambdaRogue.Core.Types
 import LambdaRogue.UI.MapView
 import System
@@ -18,6 +19,9 @@ check name ok =
      else do
        putStrLn ("FAIL " ++ name)
        exitFailure
+
+contains : String -> String -> Bool
+contains needle hay = isInfixOf (unpack needle) (unpack hay)
 
 moveFov : Coord -> Game -> Game
 moveFov c g =
@@ -65,6 +69,32 @@ run = do
   check "a visible monster is drawn"
     (case cellFor gRoom monsterPos Floor of
        Just c => c.glyph == 'K'
+       Nothing => False)
+
+  let mimicMonster = MkMonster 5 Xeroc monsterPos 10 10 Asleep
+                              [MkStatus Mimicking 1]
+      lvlMimic : Level
+      lvlMimic = { monsters := [mimicMonster] } (currentLevel gRoom)
+      gMimic : Game
+      gMimic = updateCurrentLevel (const lvlMimic) gRoom
+      disguise = mimicKindFor 5
+  check "a mimicking xeroc is drawn as its disguise"
+    (case cellFor gMimic monsterPos Floor of
+       Just c => c.glyph == itemGlyph disguise && c.style == itemStyle
+       Nothing => False)
+  check "a mimicking xeroc is named as its disguise"
+    (case describeCell gMimic monsterPos of
+       Just text => contains (mimicDisplayName gMimic mimicMonster) text
+                    && not (contains "xeroc" text)
+       Nothing => False)
+  let revealed = { statuses := [] } mimicMonster
+      lvlRevealed : Level
+      lvlRevealed = { monsters := [revealed] } (currentLevel gRoom)
+      gRevealed : Game
+      gRevealed = updateCurrentLevel (const lvlRevealed) gRoom
+  check "a revealed xeroc is drawn as X"
+    (case cellFor gRevealed monsterPos Floor of
+       Just c => c.glyph == 'X'
        Nothing => False)
   check "remembered terrain is dimmed"
     (case cellFor gRoom (MkCoord 5 5) Floor of

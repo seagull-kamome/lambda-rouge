@@ -160,6 +160,16 @@ removeMonster : MonsterId -> Level -> Level
 removeMonster i lvl =
   { monsters := filter (\m => m.id /= i) lvl.monsters } lvl
 
+||| A monster that acts or is attacked can no longer pass for an object.
+revealMimicAt : MonsterId -> Level -> Level
+revealMimicAt i lvl =
+  updateMonster i
+    (\m => { statuses := filter (\s => s.statusKind /= Mimicking) m.statuses } m)
+    lvl
+
+revealMimic : MonsterId -> Game -> Game
+revealMimic i g = updateCurrentLevel (revealMimicAt i) g
+
 itemAt : Game -> Coord -> Maybe Item
 itemAt g c =
   find (\i => case i.location of
@@ -373,8 +383,15 @@ addMonsterStatus k turns m =
 
 tickMonsterStatuses : Monster -> Monster
 tickMonsterStatuses m =
-  { statuses := filter (\s => s.remaining > 1)
-                (map (\s => { remaining := s.remaining - 1 } s) m.statuses) } m
+  { statuses := mapMaybe tickOne m.statuses } m
+  where
+    tickOne : Status -> Maybe Status
+    tickOne s =
+      if s.statusKind == Mimicking
+         then Just s
+         else if s.remaining > 1
+                 then Just ({ remaining := s.remaining - 1 } s)
+                 else Nothing
 
 beamCells : Game -> Dir -> List Coord
 beamCells g d = go 1
@@ -432,7 +449,8 @@ damageMonster m dmg lead st =
                            ({ game := g2 } st))
              in addLevelUpMessages er st1
         else let lvl' : Level
-                 lvl' = updateMonster m.id (\mm => { hp := hp' } mm) lvl
+                 lvl' = revealMimicAt m.id
+                          (updateMonster m.id (\mm => { hp := hp' } mm) lvl)
                  g1 : Game
                  g1 = updateCurrentLevel (const lvl') g
              in event (PlayerAttacked m.id dmg')
@@ -504,7 +522,7 @@ attackMonster m st =
        Miss =>
          event (PlayerAttacked m.id 0)
            (consume (say CombatMsg (MissMonster m.kind)
-                       ({ game := g1 } st)))
+                       ({ game := revealMimic m.id g1 } st)))
        Hit dmg =>
          let confuse = hasStatus ConfuseNext g1.player
              monsterStatuses = if confuse
@@ -526,7 +544,7 @@ attackMonster m st =
          in event (PlayerAttacked m.id dmg)
               (consume (say CombatMsg
                 (HitMonster m.kind dmg confuse)
-                ({ game := g2 } st)))
+                ({ game := revealMimic m.id g2 } st)))
        Killed dmg =>
          let lvl' : Level
              lvl' = removeMonster m.id lvl
@@ -1297,9 +1315,10 @@ applyWand WandPolymorph dir st =
                  (hp, rng2) = rollMonsterHp spec rng1
                  lvl = currentLevel st.game
                  lvl' : Level
-                 lvl' = updateMonster m.id
-                          (\mm => { kind := kind, hp := hp, maxHp := hp,
-                                    state := Chasing } mm) lvl
+                 lvl' = revealMimicAt m.id
+                          (updateMonster m.id
+                            (\mm => { kind := kind, hp := hp, maxHp := hp,
+                                      state := Chasing } mm) lvl)
                  g : Game
                  g = { rng := rng2 }
                        (updateCurrentLevel (const lvl') st.game)
@@ -2015,10 +2034,13 @@ monsterAct m st =
                                       (\mm => { state := Chasing } mm) lvl
                              g' : Game
                              g' = updateCurrentLevel (const lvl') st.game
-                         in event (MonsterWoke m.id)
-                              (say CombatMsg
-                                (MonsterWakesUp m.kind)
-                                ({ game := g' } st))
+                         in if isMimicking m
+                               then event (MonsterWoke m.id)
+                                      ({ game := g' } st)
+                               else event (MonsterWoke m.id)
+                                      (say CombatMsg
+                                        (MonsterWakesUp m.kind)
+                                        ({ game := g' } st))
                     else st
             Fleeing =>
               let lvl = currentLevel st.game
@@ -2037,6 +2059,21 @@ monsterTurn st =
                   (currentLevel st.game).monsters
   in foldl act st ms
   where
+    actedNow : Monster -> Step -> Step -> Bool
+    actedNow before st1 st2 =
+      let hpChanged = st2.game.player.hp /= st1.game.player.hp
+          spoke = length st2.newMessages > length st1.newMessages
+          moved = case monsterById before.id (currentLevel st2.game) of
+                    Just after => after.pos /= before.pos
+                    Nothing => False
+      in hpChanged || spoke || moved
+
+    revealIfActed : Monster -> Step -> Step -> Step
+    revealIfActed before st1 st2 =
+      if isMimicking before && actedNow before st1 st2
+         then { game := revealMimic before.id st2.game } st2
+         else st2
+
     act : Step -> Monster -> Step
     act acc m =
       if isJust acc.game.over
@@ -2052,12 +2089,13 @@ monsterTurn st =
                   lvl' = updateMonster m.id (const m'') lvl
                   acc1 : Step
                   acc1 = { game := updateCurrentLevel (const lvl') acc.game } acc
-                  acc2 = monsterAct m'' acc1
+                  acc2 = revealIfActed m'' acc1 (monsterAct m'' acc1)
               in if (hasAbility Fast m''.kind
                      || monsterHasStatus Hasted m'')
                     && not (isJust acc2.game.over)
                     then case monsterById m.id (currentLevel acc2.game) of
-                           Just m2 => monsterAct m2 acc2
+                           Just m2 => revealIfActed m2 acc2
+                                        (monsterAct m2 acc2)
                            Nothing => acc2
                     else acc2
 

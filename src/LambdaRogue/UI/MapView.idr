@@ -150,6 +150,17 @@ itemAt g c =
 trapAt : Level -> Coord -> Maybe Trap
 trapAt lvl c = find (\t => t.pos == c) lvl.traps
 
+||| The item a mimicking monster resembles.  Only the kind matters for
+||| the glyph and the pre-identification appearance name.
+public export
+mimicItem : Monster -> Item
+mimicItem m =
+  MkItem m.id (mimicKindFor m.id) (OnFloor 0 (MkCoord 0 0)) 1 0 False 0 False
+
+public export
+mimicDisplayName : Game -> Monster -> String
+mimicDisplayName g m = itemDisplayNameIn g (mimicItem m)
+
 ||| Invisible monsters are hidden until they are adjacent, the player has
 ||| see-invisible, or the player has the ring of see invisible.
 monsterHidden : Game -> Monster -> Bool
@@ -187,7 +198,10 @@ describeCell g c =
       monsterPart =
         case monsterAt lvl c of
           Just m => if visible && not (monsterHidden g m)
-                       then [monsterName m.kind] else []
+                       then [if isMimicking m
+                                then mimicDisplayName g m
+                                else monsterName m.kind]
+                       else []
           Nothing => []
       itemPart =
         case itemAt g c of
@@ -228,8 +242,12 @@ cellForWith theme hovered g c t =
                           Just m =>
                             if monsterHidden g m
                                then Just (cellOfIn theme t)
-                               else Just (MkCell (monsterGlyph m.kind)
-                                                 (monsterStyleIn theme))
+                               else if isMimicking m
+                                       then Just (MkCell
+                                                    (itemGlyph (mimicKindFor m.id))
+                                                    (itemStyleIn theme))
+                                       else Just (MkCell (monsterGlyph m.kind)
+                                                         (monsterStyleIn theme))
                           Nothing =>
                             case itemAt g c of
                               Just i => Just (MkCell (itemGlyph i.kind)

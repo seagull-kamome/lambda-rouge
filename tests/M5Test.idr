@@ -8,6 +8,7 @@ import LambdaRogue.Core.Bitset
 import LambdaRogue.Core.Dungeon
 import LambdaRogue.Core.Game
 import LambdaRogue.Core.Geometry
+import LambdaRogue.Core.Monster
 import LambdaRogue.Core.Rng
 import LambdaRogue.Core.Types
 import System
@@ -283,6 +284,51 @@ greedyTests = do
      && any (\i => i.id == 604 && i.location == OnFloor 1 (MkCoord 10 5))
             afterAttack.items)
 
+mimicTests : IO ()
+mimicTests = do
+  let mover = MkMonster 20 Xeroc (MkCoord 10 5) 50 50 Awake
+                         [MkStatus Mimicking 1]
+      afterMove = (step Wait (setMonster mover base)).game
+  check "a moving xeroc stops mimicking"
+    (maybe False (not . isMimicking) (monsterOf afterMove))
+
+  let sleeper = MkMonster 21 Xeroc (MkCoord 60 5) 50 50 Asleep
+                           [MkStatus Mimicking 1]
+      afterSleep = (step Wait (setMonster sleeper base)).game
+  check "a sleeping xeroc keeps its disguise"
+    (maybe False isMimicking (monsterOf afterSleep))
+
+  let attacker = MkMonster 22 Xeroc (MkCoord 5 5) 50 50 Awake
+                            [MkStatus Mimicking 1]
+      tough = setPlayerStats (\p => { hp := 100, maxHp := 100 } p) base
+      afterAttack = (step Wait (setMonster attacker tough)).game
+  check "an attacking xeroc stops mimicking"
+    (maybe False (not . isMimicking) (monsterOf afterAttack))
+
+  let toughMimic = MkMonster 23 Xeroc (MkCoord 5 5) 100 100 Asleep
+                               [MkStatus Mimicking 1]
+      strong = setPlayerStats (\p => { strength := 20, level := 20 } p) base
+      afterHit = (step (Move E) (setMonster toughMimic strong)).game
+  check "attacking a xeroc reveals it even on a miss"
+    (maybe False (not . isMimicking) (monsterOf afterHit))
+
+  let waker = MkMonster 24 Xeroc (MkCoord 8 5) 50 50 Asleep
+                          [MkStatus Mimicking 1]
+      woke = step Wait (setMonster waker base)
+  check "waking a xeroc does not name it"
+    (not (any (\msg => contains "xeroc" msg.text) woke.messages))
+  check "a xeroc that only wakes keeps its disguise"
+    (maybe False isMimicking (monsterOf woke.game))
+
+  let coords = [MkCoord x y | x <- range 0 9, y <- range 0 9]
+      spawns = map (\n => spawnMonsters 20 coords 1
+                             (fromSeed (cast n)))
+                   (the (List Nat) [1 .. 60])
+      xerocs = concatMap (\(ms, _, _) =>
+                            filter (\m => m.kind == Xeroc) ms) spawns
+  check "spawned xerocs start disguised"
+    (not (null xerocs) && all isMimicking xerocs)
+
 public export
 run : IO ()
 run = do
@@ -291,4 +337,5 @@ run = do
   potionTests
   wandTests
   greedyTests
+  mimicTests
   putStrLn "m5 tests passed"

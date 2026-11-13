@@ -82,7 +82,7 @@ allStatusKinds : List StatusKind
 allStatusKinds =
   [ Confused, Blinded, Hasted, SeeInvisible, DetectMonsters, DetectFood
   , DetectMagic, Invisible, Poisoned, Held, Slowed, Paralyzed, Scared
-  , Sleeping, Hallucinating, Levitated, ConfuseNext
+  , Sleeping, Hallucinating, Levitated, ConfuseNext, Mimicking
   ]
 
 allMonsterStates : List MonsterState
