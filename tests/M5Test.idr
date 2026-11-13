@@ -80,6 +80,12 @@ addToPack items g =
 ringItem : ItemId -> RingKind -> Item
 ringItem iid k = MkItem iid (Ring k) InPack 1 0 False 0 False
 
+armorItem : ItemId -> ArmorKind -> Bool -> Item
+armorItem iid k cursed = MkItem iid (Armor k) InPack 1 0 cursed 0 False
+
+scrollItem : ItemId -> ScrollKind -> Item
+scrollItem iid k = MkItem iid (Scroll k) InPack 1 0 False 0 False
+
 equipLeft : Item -> Game -> Game
 equipLeft it g =
   let p : Player
@@ -333,6 +339,35 @@ withStatus : StatusKind -> Int32 -> Game -> Game
 withStatus k turns =
   setPlayerStats (\p => { statuses := MkStatus k turns :: p.statuses } p)
 
+curseTests : IO ()
+curseTests = do
+  let cursedArmor = armorItem 900 LeatherArmor True
+      cursedRing = MkItem 901 (Ring RingProtection) InPack 1 0 True 0 False
+      curseScroll = scrollItem 902 ScrollRemoveCurse
+      g0 = setPlayerStats
+             (\p => { worn := Just 900
+                    , inventory := [900, 901, 902] ++ p.inventory } p)
+             (setItems [cursedArmor, cursedRing, curseScroll] base)
+      out = step (Read 902) g0
+      itemCursed : ItemId -> Game -> Bool
+      itemCursed iid g =
+        maybe False (.cursed) (find (\i => i.id == iid) g.items)
+  check "remove curse cleanses the worn armor"
+    (not (itemCursed 900 out.game))
+  check "remove curse leaves carried jewelry cursed"
+    (itemCursed 901 out.game)
+  check "remove curse consumes the scroll"
+    (isNothing (find (\i => i.id == 902) out.game.items))
+
+  let scrollOnly = scrollItem 903 ScrollRemoveCurse
+      ringOnly = MkItem 904 (Ring RingProtection) InPack 1 0 True 0 False
+      noArmor = setPlayerStats
+                  (\p => { inventory := [903, 904] ++ p.inventory } p)
+                  (setItems [scrollOnly, ringOnly] base)
+      outNoArmor = step (Read 903) noArmor
+  check "remove curse without worn armor leaves carried items cursed"
+    (itemCursed 904 outNoArmor.game)
+
 waitTimes : Nat -> Game -> Game
 waitTimes Z g = g
 waitTimes (S n) g = waitTimes n (step Wait g).game
@@ -369,5 +404,6 @@ run = do
   wandTests
   greedyTests
   mimicTests
+  curseTests
   regenTests
   putStrLn "m5 tests passed"

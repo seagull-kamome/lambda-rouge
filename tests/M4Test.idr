@@ -224,10 +224,11 @@ scrollTests = do
     (hasStatus DetectFood outFood.game.player
      && statusTurns DetectFood outFood.game.player > 0)
 
-  -- Remove curse clears cursed pack items.
-  let cursedSword = weapon 312 LongSword 0 True
-      gCurse = addToPack [cursedSword, scroll 313 ScrollRemoveCurse] base
-      outCurse = step (Read 313) gCurse
+  -- Remove curse clears the worn armor's curse.
+  let cursedArmor = armor 312 LeatherArmor 0 True
+      gCurse = addToPack [cursedArmor, scroll 313 ScrollRemoveCurse] base
+      wornCurse = step (Wear 312) gCurse
+      outCurse = step (Read 313) wornCurse.game
   check "remove curse clears the curse"
     (maybe False (\i => not i.cursed) (findPackItem outCurse.game 312))
 

@@ -1238,11 +1238,17 @@ applyScroll ScrollEnchantWeapon st =
                ({ game := g2 } st)
 applyScroll ScrollCreateMonster st = createMonsterNear st
 applyScroll ScrollRemoveCurse st =
-  let g : Game
-      g = { items := map (\i => if i.location == InPack
-                                   then { cursed := False } i else i)
-                         st.game.items } st.game
-  in say ItemMsg SurgeOfRelief ({ game := g } st)
+  case st.game.player.worn of
+    Nothing => say ItemMsg SurgeOfRelief st
+    Just iid =>
+      case findPackItem st.game iid of
+        Nothing => say ItemMsg SurgeOfRelief st
+        Just it =>
+          let g1 : Game
+              g1 = updateItem iid (\i => { cursed := False } i) st.game
+              g2 : Game
+              g2 = recomputeArmor g1
+          in say ItemMsg SurgeOfRelief ({ game := g2 } st)
 applyScroll ScrollAggravateMonsters st =
   let g : Game
       g = updateCurrentLevel
