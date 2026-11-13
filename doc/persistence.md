@@ -3,7 +3,7 @@
 - Status: Draft 0.14（M5 スライス 8 の静穏ターン自然回復を反映。`quietTurns` を任意フィールドとして追加）
 - Date: 2026-11-13
 - 対象: `LambdaRogue.Persist.*`, `LambdaRogue.Core.Replay`
-- 前提: `doc/design.md` Draft 1.21, `doc/core-api.md` Draft 1.15
+- 前提: `doc/design.md` Draft 1.22, `doc/core-api.md` Draft 1.16
 
 ## 1. 方針
 

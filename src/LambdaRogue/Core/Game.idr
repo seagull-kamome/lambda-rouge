@@ -381,6 +381,12 @@ addMonsterStatus k turns m =
   { statuses := MkStatus k (max 1 turns)
                 :: filter (\s => s.statusKind /= k) m.statuses } m
 
+||| Aggravation wakes sleeping monsters and sends them after the player.
+aggravateMonster : Monster -> Monster
+aggravateMonster m =
+  { state := Chasing
+  , statuses := filter (\s => s.statusKind /= Sleeping) m.statuses } m
+
 tickMonsterStatuses : Monster -> Monster
 tickMonsterStatuses m =
   { statuses := mapMaybe tickOne m.statuses } m
@@ -1102,8 +1108,7 @@ equipRingAt left it st =
       g : Game
       g = if it.kind == Ring RingAggravateMonster
              then updateCurrentLevel
-                    (\l => { monsters := map (\m => { state := Chasing } m)
-                                                l.monsters } l) g1
+                    (\l => { monsters := map aggravateMonster l.monsters } l) g1
              else g1
       message = if it.cursed
                    then RingTightens
@@ -1252,8 +1257,7 @@ applyScroll ScrollRemoveCurse st =
 applyScroll ScrollAggravateMonsters st =
   let g : Game
       g = updateCurrentLevel
-            (\l => { monsters := map (\m => { state := Chasing } m) l.monsters } l)
-            st.game
+            (\l => { monsters := map aggravateMonster l.monsters } l) st.game
   in say WarningMsg GrowlEverywhere
        ({ game := g } st)
 applyScroll ScrollProtectArmor st =

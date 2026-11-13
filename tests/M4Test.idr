@@ -283,11 +283,13 @@ scrollTests = do
   check "sleep puts monsters to sleep"
     (maybe False (\m => m.state == Asleep) (monsterById 1 outSleep.game))
 
-  let gAgg = setMonster ({ state := Asleep } rat)
+  let gAgg = setMonster ({ state := Asleep
+                         , statuses := [MkStatus Sleeping 20] } rat)
                (addToPack [scroll 321 ScrollAggravateMonsters] base)
       outAgg = step (Read 321) gAgg
   check "aggravate monsters wakes and chases"
-    (maybe False (\m => m.state == Chasing) (monsterById 1 outAgg.game))
+    (maybe False (\m => m.state == Chasing && not (monsterHas Sleeping m))
+                   (monsterById 1 outAgg.game))
 
   let gConf = setMonster rat (addToPack [scroll 322 ScrollConfuseMonster] base)
       outConf = step (Read 322) gConf
@@ -452,11 +454,12 @@ ringTests = do
      && outDex.game.player.ringArmor == 0)
 
   let aggroRing = ring 505 RingAggravateMonster 0 False
-      asleepRat = MkMonster 1 Emu (MkCoord 8 5) 4 4 Asleep []
+      asleepRat = MkMonster 1 Emu (MkCoord 8 5) 4 4 Asleep [MkStatus Sleeping 20]
       outAggro = step (PutOnRing 505)
                    (setMonster asleepRat (addToPack [aggroRing] base))
   check "an aggravate ring wakes monsters"
-    (maybe False (\m => m.state == Chasing) (monsterById 1 outAggro.game))
+    (maybe False (\m => m.state == Chasing && not (monsterHas Sleeping m))
+                   (monsterById 1 outAggro.game))
 
   let regenRing = ring 506 RingRegeneration 0 False
       gRegen = setPlayerStats (\p => { hp := 5 } p)

@@ -1,9 +1,9 @@
 # lambda-rogue Core API 設計
 
-- Status: Draft 1.15（M5 スライス 10 の浮遊トラップ無効を反映）
+- Status: Draft 1.16（M5 スライス 11 の aggravate の起床を反映）
 - Date: 2026-11-13
 - 対象: `LambdaRogue.Core.*` と `LambdaRogue.UI.*`、`LambdaRogue.Persist.*`
-- 前提: `doc/design.md` Draft 1.21
+- 前提: `doc/design.md` Draft 1.22
 
 ## 1. 境界
 
@@ -2763,3 +2763,19 @@ data Command
   浮遊メッセージ、浮遊なしでは同じトラップが発動して発見済みになることの
   4 チェックを追加した。
 - 全体は 1031 チェックから 1035 チェックへ増えた。
+
+## 39. M5 スライス 11 実装ノート（2026-11-13、aggravate の起床）
+
+### 39.1 挙動
+
+- `aggravateMonster` はモンスターの `state` を `Chasing` にし、
+  `Sleeping` 状態を除去する。`Mimicking` など他の状態はそのまま残す。
+- aggravate monsters の巻物と aggravate monster の指輪は、どちらも
+  この関数を全モンスターに適用する。
+- 眠っていたモンスターは次のモンスターターンから追跡を始める。
+
+### 39.2 テスト
+
+- `M4Test` の巻物と指輪の aggravate テストを、`Sleeping` 状態を持つ
+  モンスターで検証する形に更新した。
+- テスト数は 1035 から 1036 へ増えた（パレット順序のテストを含む）。

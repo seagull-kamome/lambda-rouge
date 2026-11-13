@@ -204,7 +204,8 @@ M5 slice 7 made Xerocs mimic floor items until they move, attack, or are hit.
 M5 slice 8 replaced turn-number regeneration with quiet turns since the last
 HP loss, so resting heals on the original's schedule. M5 slice 9 limited the
 scroll of remove curse to the worn armor. M5 slice 10 made levitation skip
-hidden traps instead of triggering them.
+hidden traps instead of triggering them. M5 slice 11 made aggravate wake
+sleeping monsters before they chase.
 
 ## Next priorities
 
