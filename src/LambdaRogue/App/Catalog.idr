@@ -262,6 +262,7 @@ messageTemplatesJa =
   , ("feel-weaker", "弱くなった気がする。")
   , ("bear-trap", "熊罠が足に食い込んだ！")
   , ("fall-asleep", "あなたは眠りに落ちた。")
+  , ("float-over-trap", "あなたは罠の上を浮かんで通過した。")
   , ("strange-noise", "遠くで奇妙な音が聞こえる。")
   , ("found-trap", "{}を見つけた。")
   , ("found-trap-unknown", "罠を見つけた。")

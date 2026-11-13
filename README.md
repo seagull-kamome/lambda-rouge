@@ -61,7 +61,7 @@ export IDRIS2_CFLAGS="-Wno-parentheses-equality"
 ./verify.sh
 ```
 
-This runs a clean build, the full test suite (1031 checks), and a PTY smoke test
+This runs a clean build, the full test suite (1035 checks), and a PTY smoke test
 that starts, draws and quits the executable. Test data is isolated under
 `build/verify-data`; real saves, scores and settings are not touched.
 
@@ -203,7 +203,8 @@ limited the wand of light to the current room instead of the whole level.
 M5 slice 7 made Xerocs mimic floor items until they move, attack, or are hit.
 M5 slice 8 replaced turn-number regeneration with quiet turns since the last
 HP loss, so resting heals on the original's schedule. M5 slice 9 limited the
-scroll of remove curse to the worn armor.
+scroll of remove curse to the worn armor. M5 slice 10 made levitation skip
+hidden traps instead of triggering them.
 
 ## Next priorities
 

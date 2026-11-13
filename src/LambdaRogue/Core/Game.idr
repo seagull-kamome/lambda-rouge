@@ -726,18 +726,20 @@ triggerTrap c st =
   in case find (\t => t.pos == c && not t.revealed) lvl.traps of
        Nothing => st
        Just trap =>
-         let lvl' : Level
-             lvl' = { traps := map (\t : Trap =>
-                                      if t.pos == c
-                                         then { revealed := True } t
-                                         else t)
-                                 lvl.traps } lvl
-             g' : Game
-             g' = updateCurrentLevel (const lvl') st.game
-             st1 = event (TrapTriggered trap.kind c)
-                     (say SystemMsg (TriggerTrap trap.kind)
-                         ({ game := g' } st))
-         in applyTrap trap st1
+         if hasStatus Levitated st.game.player
+            then say SystemMsg FloatOverTrap st
+            else let lvl' : Level
+                     lvl' = { traps := map (\t : Trap =>
+                                              if t.pos == c
+                                                 then { revealed := True } t
+                                                 else t)
+                                         lvl.traps } lvl
+                     g' : Game
+                     g' = updateCurrentLevel (const lvl') st.game
+                     st1 = event (TrapTriggered trap.kind c)
+                             (say SystemMsg (TriggerTrap trap.kind)
+                                 ({ game := g' } st))
+                 in applyTrap trap st1
 
 ||| Searching is less reliable when blind or hallucinating, mirroring the
 ||| original's increased denominator (`rnd(2 + probinc)`).
@@ -866,9 +868,7 @@ playerMove d st =
                                                  g' = { player := player' } g
                                                  st1 = event (PlayerMoved target)
                                                          (consume ({ game := g' } st0))
-                                             in if hasStatus Levitated g.player
-                                                   then st1
-                                                   else triggerTrap target st1
+                                             in triggerTrap target st1
 
 stairsAction : StairDir -> Step -> Step
 stairsAction dir st =

@@ -368,6 +368,24 @@ curseTests = do
   check "remove curse without worn armor leaves carried items cursed"
     (itemCursed 904 outNoArmor.game)
 
+levitationTests : IO ()
+levitationTests = do
+  let trapped = { rng := fromSeed 1 }
+                  (setTraps [MkTrap (MkCoord 5 5) ArrowTrap False] base)
+      floating = withStatus Levitated 10 trapped
+      out = step (Move E) floating
+  check "levitation prevents trap damage"
+    (out.game.player.hp == floating.player.hp)
+  check "a trap under a levitating player stays hidden"
+    (maybe False (not . revealed) (trapAt (MkCoord 5 5) out.game))
+  check "levitation reports floating over the trap"
+    (hasMessage "You float over a trap." out)
+
+  let grounded = step (Move E) trapped
+  check "the same trap fires without levitation"
+    (grounded.game.player.hp < trapped.player.hp
+     && revealedAt (MkCoord 5 5) grounded.game)
+
 waitTimes : Nat -> Game -> Game
 waitTimes Z g = g
 waitTimes (S n) g = waitTimes n (step Wait g).game
@@ -405,5 +423,6 @@ run = do
   greedyTests
   mimicTests
   curseTests
+  levitationTests
   regenTests
   putStrLn "m5 tests passed"

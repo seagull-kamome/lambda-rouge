@@ -69,6 +69,7 @@ data Msg
   | FeelWeaker
   | BearTrap
   | FallAsleep
+  | FloatOverTrap
   | StrangeNoise
   | FoundTrap TrapKind
   | FoundTrapUnknown
@@ -312,6 +313,7 @@ msgEn StrengthHolds = "You feel weak, but your strength holds."
 msgEn FeelWeaker = "You feel weaker."
 msgEn BearTrap = "The bear trap snaps shut on your leg!"
 msgEn FallAsleep = "You fall asleep."
+msgEn FloatOverTrap = "You float over a trap."
 msgEn StrangeNoise = "You hear a strange noise in the distance."
 msgEn (FoundTrap kind) = trapFoundEn kind
 msgEn FoundTrapUnknown = "You found a trap."
@@ -482,6 +484,7 @@ msgKey StrengthHolds = "strength-holds"
 msgKey FeelWeaker = "feel-weaker"
 msgKey BearTrap = "bear-trap"
 msgKey FallAsleep = "fall-asleep"
+msgKey FloatOverTrap = "float-over-trap"
 msgKey StrangeNoise = "strange-noise"
 msgKey (FoundTrap _) = "found-trap"
 msgKey FoundTrapUnknown = "found-trap-unknown"
@@ -630,6 +633,7 @@ msgArgs StrengthHolds = []
 msgArgs FeelWeaker = []
 msgArgs BearTrap = []
 msgArgs FallAsleep = []
+msgArgs FloatOverTrap = []
 msgArgs StrangeNoise = []
 msgArgs (FoundTrap kind) = [show kind]
 msgArgs FoundTrapUnknown = []
@@ -790,6 +794,7 @@ sampleMessages =
   , FeelWeaker
   , BearTrap
   , FallAsleep
+  , FloatOverTrap
   , StrangeNoise
   , FoundTrap Bear
   , FoundTrapUnknown

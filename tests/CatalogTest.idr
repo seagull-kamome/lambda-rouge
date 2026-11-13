@@ -44,7 +44,7 @@ run = do
       -- One representative per constructor.  Keeping this number explicit
       -- means adding a constructor without a sample and a Japanese
       -- template fails here instead of silently shipping English text.
-      messageCount = 141
+      messageCount = 142
 
   check "the sample table has one message per constructor"
     (length sampleMessages == messageCount)
