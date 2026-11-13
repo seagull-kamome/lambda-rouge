@@ -1,9 +1,9 @@
 # lambda-rogue 永続化・リプレイ設計
 
-- Status: Draft 0.13（M5 スライス 7 の Xeroc の物体擬態を反映。永続化形式の変更なし）
+- Status: Draft 0.14（M5 スライス 8 の静穏ターン自然回復を反映。`quietTurns` を任意フィールドとして追加）
 - Date: 2026-11-13
 - 対象: `LambdaRogue.Persist.*`, `LambdaRogue.Core.Replay`
-- 前提: `doc/design.md` Draft 1.17, `doc/core-api.md` Draft 1.12
+- 前提: `doc/design.md` Draft 1.18, `doc/core-api.md` Draft 1.13
 
 ## 1. 方針
 
@@ -121,6 +121,7 @@ $XDG_DATA_HOME/lambda-rogue/       # なければ ~/.local/share/lambda-rogue/
     "seed": "0123456789abcdef",
     "rng": "c6a145a7a1e13311c902e7a0ec0096a9",
     "turn": 1240,
+    "quietTurns": 7,
     "depth": 7,
     "player": {
       "pos": { "x": 12, "y": 7 },
@@ -217,6 +218,7 @@ $XDG_DATA_HOME/lambda-rogue/       # なければ ~/.local/share/lambda-rogue/
 | `seed` | string | 16 文字の小文字 hex |
 | `rng` | string | 32 文字の小文字 hex（`Rng` の `s0` + `s1`） |
 | `turn` | integer | `Game.turn`。0 以上 |
+| `quietTurns` | integer | HP を失わずに消費した連続ターン数。0 以上。古いセーブで省略時は 0 |
 | `depth` | integer | 現在の階層。1..26 |
 | `player` | object | 3.4 |
 | `levels` | array | 訪問済みの階層。3.6 |
@@ -230,6 +232,8 @@ $XDG_DATA_HOME/lambda-rogue/       # なければ ~/.local/share/lambda-rogue/
 | `visible` | string | 448 文字の小文字 hex（現在の視界ビットセット） |
 
 - `depth` は `levels` に含まれなければならない。
+- `quietTurns` はスキーマ v1 の任意フィールドで、省略時は 0 として復元する。
+  新しく書くセーブには常に含める。
 - `knownKinds` と `appearances` はランごとの知識・外見で、`settings.json`
   とは独立している。
 - `messages` は `gameDigest` の対象外。リプレイ検証では状態だけを比較する。

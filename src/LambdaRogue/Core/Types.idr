@@ -1213,6 +1213,9 @@ record Game where
   seed : Bits64
   rng : Rng
   turn : Turn
+  ||| Consecutive consumed turns without losing HP.  The natural healing
+  ||| daemon uses this quiet-turn count instead of the absolute turn number.
+  quietTurns : Turn
   depth : Depth
   player : Player
   levels : List Level

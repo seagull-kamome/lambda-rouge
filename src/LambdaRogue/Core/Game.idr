@@ -2125,18 +2125,21 @@ healInterval level =
     _ => 3
 
 ||| The heal daemon: one hit point per interval up to level 8, then
-||| 1d(level-7) every three turns.  No roll is made at full health.
-naturalHeal : Player -> Turn -> Rng -> (Int32, Rng)
-naturalHeal p turn rng =
+||| 1d(level-7) every three turns.  `quiet` counts consumed turns since
+||| the player last lost HP; a healing event resets it.  No roll is made
+||| at full health.
+naturalHeal : Player -> Turn -> Rng -> (Int32, Turn, Rng)
+naturalHeal p quiet rng =
   if p.hp >= p.maxHp
-     then (0, rng)
+     then (0, quiet, rng)
      else if p.level <= 8
-             then if turn `mod` healInterval p.level == 0
-                     then (1, rng)
-                     else (0, rng)
-             else if turn `mod` 3 == 0
-                     then roll 1 (min 14 (p.level - 7)) rng
-                     else (0, rng)
+             then if quiet >= healInterval p.level
+                     then (1, 0, rng)
+                     else (0, quiet, rng)
+             else if quiet >= 3
+                     then let (n, rng') = roll 1 (min 14 (p.level - 7)) rng
+                          in (n, 0, rng')
+                     else (0, quiet, rng)
 
 healAmount : Int32 -> Player -> Player
 healAmount n p =
@@ -2165,11 +2168,15 @@ survivalTurn st =
                 ({ game := g2 } st1))
        Nothing =>
          let p0 = g1.player
+             damaged = p0.hp < st.game.player.hp
+             quiet0 : Turn
+             quiet0 = if damaged then 0 else st.game.quietTurns + 1
              p1 : Player
              p1 = healAmount (countRing RingRegeneration g1) p0
-             healRoll = naturalHeal p1 g1.turn g1.rng
+             healRoll = naturalHeal p1 quiet0 g1.rng
              natHeal = fst healRoll
-             rng1 = snd healRoll
+             quiet1 = fst (snd healRoll)
+             rng1 = snd (snd healRoll)
              p2 : Player
              p2 = healAmount natHeal p1
              slowRings = countRing RingSlowDigestion g1
@@ -2183,7 +2190,7 @@ survivalTurn st =
                      then { hunger := min hungerMax (p2.hunger + digestRecovery) } p2
                      else p2
              g2 : Game
-             g2 = { player := p3, rng := rng1 } g1
+             g2 = { player := p3, rng := rng1, quietTurns := quiet1 } g1
              teleportRoll = if hasRing RingTeleportation g2
                                then chance 2 g2.rng
                                else (False, g2.rng)

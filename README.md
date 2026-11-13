@@ -61,7 +61,7 @@ export IDRIS2_CFLAGS="-Wno-parentheses-equality"
 ./verify.sh
 ```
 
-This runs a clean build, the full test suite (1023 checks), and a PTY smoke test
+This runs a clean build, the full test suite (1027 checks), and a PTY smoke test
 that starts, draws and quits the executable. Test data is isolated under
 `build/verify-data`; real saves, scores and settings are not touched.
 
@@ -201,6 +201,8 @@ them during its free search. M5 slice 5 gave Orcs their greedy behaviour:
 they prefer visible gold, pick it up, and drop it when killed. M5 slice 6
 limited the wand of light to the current room instead of the whole level.
 M5 slice 7 made Xerocs mimic floor items until they move, attack, or are hit.
+M5 slice 8 replaced turn-number regeneration with quiet turns since the last
+HP loss, so resting heals on the original's schedule.
 
 ## Next priorities
 

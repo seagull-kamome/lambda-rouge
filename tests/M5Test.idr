@@ -329,6 +329,37 @@ mimicTests = do
   check "spawned xerocs start disguised"
     (not (null xerocs) && all isMimicking xerocs)
 
+withStatus : StatusKind -> Int32 -> Game -> Game
+withStatus k turns =
+  setPlayerStats (\p => { statuses := MkStatus k turns :: p.statuses } p)
+
+waitTimes : Nat -> Game -> Game
+waitTimes Z g = g
+waitTimes (S n) g = waitTimes n (step Wait g).game
+
+regenTests : IO ()
+regenTests = do
+  let hurt = setPlayerStats (\p => { hp := 5, maxHp := 12 } p) base
+      after17 = waitTimes 17 hurt
+  check "natural healing waits for the level-1 interval"
+    (after17.player.hp == 5 && after17.quietTurns == 17)
+  let after18 = waitTimes 18 hurt
+  check "natural healing restores a hit point after 18 quiet turns"
+    (after18.player.hp == 6 && after18.quietTurns == 0)
+
+  let poisoned = withStatus Poisoned 1
+                   ({ quietTurns := 10 }
+                      (setPlayerStats (\p => { hp := 5, maxHp := 12 } p) base))
+      afterPoison = waitTimes 1 poisoned
+  check "losing HP restarts the quiet-turn counter"
+    (afterPoison.player.hp == 4 && afterPoison.quietTurns == 0)
+
+  let healthyHigh = setPlayerStats (\p => { hp := 50, maxHp := 50, level := 9 } p) base
+      afterFive = waitTimes 5 healthyHigh
+  check "natural healing makes no roll at full health"
+    (stateHex afterFive.rng == stateHex healthyHigh.rng
+     && afterFive.player.hp == 50)
+
 public export
 run : IO ()
 run = do
@@ -338,4 +369,5 @@ run = do
   wandTests
   greedyTests
   mimicTests
+  regenTests
   putStrLn "m5 tests passed"
