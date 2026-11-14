@@ -1177,13 +1177,9 @@ applyScroll ScrollHoldMonster st =
             st.game
   in say ItemMsg MonstersFreeze ({ game := g } st)
 applyScroll ScrollSleep st =
-  let g : Game
-      g = updateCurrentLevel
-            (\l => { monsters := map
-                       (\m => { state := Asleep }
-                                (addMonsterStatus Sleeping 20 m)) l.monsters } l)
-            st.game
-  in say ItemMsg MonstersSleep ({ game := g } st)
+  let p : Player
+      p = addStatus Sleeping 6 st.game.player
+  in say WarningMsg FallAsleep ({ game := { player := p } st.game } st)
 applyScroll ScrollEnchantArmor st =
   case st.game.player.worn of
     Nothing => say WarningMsg NotWearingArmor st

@@ -280,8 +280,12 @@ scrollTests = do
 
   let gSleep = setMonster rat (addToPack [scroll 320 ScrollSleep] base)
       outSleep = step (Read 320) gSleep
-  check "sleep puts monsters to sleep"
-    (maybe False (\m => m.state == Asleep) (monsterById 1 outSleep.game))
+  check "the sleep scroll puts the reader to sleep"
+    (hasStatus Sleeping outSleep.game.player
+     && hasMessage "You fall asleep." outSleep)
+  check "the sleep scroll leaves monsters awake"
+    (maybe False (\m => not (monsterHas Sleeping m))
+                   (monsterById 1 outSleep.game))
 
   let gAgg = setMonster ({ state := Asleep
                          , statuses := [MkStatus Sleeping 20] } rat)
