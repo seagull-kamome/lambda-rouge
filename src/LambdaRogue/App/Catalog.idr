@@ -76,6 +76,7 @@ statusName Japanese Hallucinating = "幻覚"
 statusName Japanese Levitated = "浮遊"
 statusName Japanese ConfuseNext = "混乱付与"
 statusName Japanese Mimicking = "物体擬態"
+statusName Japanese Fainted = "気絶"
 
 public export
 hungerName : Language -> HungerState -> String
@@ -191,6 +192,7 @@ statusExpiryJa "sleeping" = "目を覚ました。"
 statusExpiryJa "hallucinating" = "すべてが正常に見える。"
 statusExpiryJa "levitated" = "ゆっくり床に降りた。"
 statusExpiryJa "confuse next" = "手の光が消えた。"
+statusExpiryJa "fainted" = "意識を取り戻した。"
 statusExpiryJa other = other
 
 stairNameJa : String -> String

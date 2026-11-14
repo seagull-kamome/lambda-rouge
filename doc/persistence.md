@@ -1,9 +1,9 @@
 # lambda-rogue 永続化・リプレイ設計
 
-- Status: Draft 0.14（M5 スライス 8 の静穏ターン自然回復を反映。`quietTurns` を任意フィールドとして追加）
-- Date: 2026-11-13
+- Status: Draft 0.15（M5 スライス 13 の飢餓失神を反映。`hunger` は `-850` 超を許可）
+- Date: 2026-11-14
 - 対象: `LambdaRogue.Persist.*`, `LambdaRogue.Core.Replay`
-- 前提: `doc/design.md` Draft 1.23, `doc/core-api.md` Draft 1.17
+- 前提: `doc/design.md` Draft 1.24, `doc/core-api.md` Draft 1.18
 
 ## 1. 方針
 
@@ -244,7 +244,7 @@ $XDG_DATA_HOME/lambda-rogue/       # なければ ~/.local/share/lambda-rogue/
 - `pos`: `{ "x": 0..79, "y": 0..21 }`。
 - `hp`, `maxHp`, `strength`, `maxStrength`, `armor`, `level`, `exp`,
   `gold`, `hunger`: 整数。`0 <= hp <= maxHp`、`0 <= strength <= maxStrength`、
-  `level >= 1`、`exp >= 0`、`gold >= 0`、`hunger >= 0`。
+  `level >= 1`、`exp >= 0`、`gold >= 0`、`hunger > -850`（`-850` は飢餓死）。
 - `inventory`: `ItemId` の配列。所持順で、長さは 23 以下。重複禁止。
   各 ID は `items` に存在し、`location.kind = "pack"` でなければならない。
 - `wielded`, `worn`, `leftRing`, `rightRing`: `ItemId` または `null`。
@@ -253,7 +253,7 @@ $XDG_DATA_HOME/lambda-rogue/       # なければ ~/.local/share/lambda-rogue/
 - `ringArmor`, `ringDamage`, `ringAccuracy`, `ringStrength`: 指輪の常時補正。
 - `statuses`: `{ "kind": StatusKind, "remaining": Int }`。
   `kind` は `show StatusKind` の安定文字列（`confused`, `poisoned`,
-  `sleeping`, `mimicking an object` など）。
+  `sleeping`, `fainted`, `mimicking an object` など）。
   同じ `kind` を重複させず、`remaining >= 0`。
 
 ### 3.5 タイル文字コード

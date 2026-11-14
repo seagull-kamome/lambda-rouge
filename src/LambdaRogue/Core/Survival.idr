@@ -1,8 +1,9 @@
 ||| Hunger, starvation and status timers.
 |||
 ||| Rogue 5.4.4 starts a character with 1300 nutrition, becomes hungry at
-||| 300, weak at 150, and starts fainting/starving at 0.  One point is
-||| consumed per turn (slow-digestion rings reduce that rate).
+||| 300, weak at 150, and starts fainting at 0.  Hunger reaches the fatal
+||| -850 after roughly 850 further turns.  One point is consumed per turn
+||| (slow-digestion rings reduce that rate).
 module LambdaRogue.Core.Survival
 
 import Data.List
@@ -26,6 +27,11 @@ weakAt = 150
 public export
 starvingAt : Int32
 starvingAt = 0
+
+||| Hunger value at which the character dies of starvation.
+public export
+starvingDeathAt : Int32
+starvingDeathAt = -850
 
 public export
 data HungerState = Satiated | Normal | Hungry | Weak | Fainting
@@ -99,15 +105,14 @@ tickSurvival p0 =
         ++ (if h0 > starvingAt && h1 <= starvingAt
                then [FaintFromHunger]
                else [])
-      starving = h1 <= starvingAt
       hp' : Int32
-      hp' = max 0 (if starving then p1.hp - 1 else p1.hp)
+      hp' = p1.hp
       p2 : Player
       p2 = { hunger := h1, hp := hp' } p1
       died =
-        if hp' <= 0
-           then if starving then Just Starved
-                else if statusDamage p0.statuses > 0 then Just (OtherDeath "poison")
-                else Nothing
-           else Nothing
+        if h1 <= starvingDeathAt
+           then Just Starved
+           else if hp' <= 0 && statusDamage p0.statuses > 0
+                   then Just (OtherDeath "poison")
+                   else Nothing
   in MkSurvivalResult p2 (statusMsgs ++ hungerMsgs) died

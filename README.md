@@ -61,7 +61,7 @@ export IDRIS2_CFLAGS="-Wno-parentheses-equality"
 ./verify.sh
 ```
 
-This runs a clean build, the full test suite (1037 checks), and a PTY smoke test
+This runs a clean build, the full test suite (1042 checks), and a PTY smoke test
 that starts, draws and quits the executable. Test data is isolated under
 `build/verify-data`; real saves, scores and settings are not touched.
 
@@ -206,7 +206,8 @@ HP loss, so resting heals on the original's schedule. M5 slice 9 limited the
 scroll of remove curse to the worn armor. M5 slice 10 made levitation skip
 hidden traps instead of triggering them. M5 slice 11 made aggravate wake
 sleeping monsters before they chase. M5 slice 12 made the scroll of sleep put
-its reader to sleep instead of every monster.
+its reader to sleep instead of every monster. M5 slice 13 made starvation
+cause fainting and a `-850` nutrition death instead of draining HP.
 
 ## Next priorities
 

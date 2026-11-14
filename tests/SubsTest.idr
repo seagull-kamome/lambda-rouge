@@ -9,6 +9,7 @@ import LambdaRogue.Core.Dungeon
 import LambdaRogue.Core.Game
 import LambdaRogue.Core.Geometry
 import LambdaRogue.Core.Replay
+import LambdaRogue.Core.Survival
 import LambdaRogue.Core.Types
 import LambdaRogue.UI.Animation
 import LambdaRogue.UI.Theme
@@ -476,7 +477,7 @@ run = do
       lvl = { monsters := [] } (currentLevel gStarve0)
       gStarve = updateCurrentLevel (const lvl) gStarve0
       pDying : Player
-      pDying = { hp := 1, hunger := -200 } gStarve.player
+      pDying = { hp := 1, hunger := starvingDeathAt + 1 } gStarve.player
       gDying : Game
       gDying = { player := pDying } gStarve
       mDying = MkModel c gDying 80 24 False Nothing Nothing Nothing

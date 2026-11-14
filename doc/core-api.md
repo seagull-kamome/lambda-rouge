@@ -1,9 +1,9 @@
 # lambda-rogue Core API 設計
 
-- Status: Draft 1.17（M5 スライス 12 の sleep の巻物を反映）
+- Status: Draft 1.18（M5 スライス 13 の飢餓失神と `-850` 死亡を反映）
 - Date: 2026-11-14
 - 対象: `LambdaRogue.Core.*` と `LambdaRogue.UI.*`、`LambdaRogue.Persist.*`
-- 前提: `doc/design.md` Draft 1.23
+- 前提: `doc/design.md` Draft 1.24
 
 ## 1. 境界
 
@@ -278,6 +278,8 @@ data StatusKind
   | Hallucinating
   | Levitated
   | ConfuseNext
+  | Mimicking
+  | Fainted
 
 public export
 record Status where
@@ -293,7 +295,8 @@ record Status where
 - 同じ `StatusKind` を重複して持たない。`addStatus` は既存の残りターンと
   新しい残りターンの大きい方を採用する。
 - 毒は毎ターン 1 HP のダメージ。HP 0 で死亡する。
-- `Sleeping` / `Paralyzed` のプレイヤーはコマンドを受け付けず、ターンだけ消費する。
+- `Sleeping` / `Paralyzed` / `Fainted` のプレイヤーはコマンドを受け付けず、
+  ターンだけ消費する。`Fainted` は空腹度 0 以下で 1/5 の確率で付く。
   `Held` は移動を封じるが、隣接モンスターへの攻撃は許可する。
 - UI はアイコン・名前・残りターンを表示する。色だけに依存しない。
 - 効果の発生源と持続の詳細は `doc/rogue-reference.md` 15 章を参照する。
@@ -653,7 +656,6 @@ M4 の忠実性監査で確定した値と、意図的に残した差分は
 - スコア計算と死因別の表示。
 - 巻物・杖の対象選択 UI と、Core 側の対象指定 API。
 - 群れ生成。
-- 飢餓の失神・`-850` 死亡。
 - モンスターの遠距離攻撃（弓・投擲）とドラゴンの火炎反射。
 
 ## 16. M1 実装ノート（2026-10-28）
@@ -1026,7 +1028,7 @@ findPackItem : Game -> ItemId -> Maybe Item
 
 ```idris
 public export
-hungerMax, hungryAt, weakAt, starvingAt : Int32
+hungerMax, hungryAt, weakAt, starvingAt, starvingDeathAt : Int32
 
 public export
 data HungerState = Satiated | Normal | Hungry | Weak | Fainting
@@ -1038,17 +1040,19 @@ public export
 record SurvivalResult where
   constructor MkSurvivalResult
   player : Player
-  messages : List String
+  messages : List Msg
   died : Maybe DeathCause
 
 public export
 tickSurvival : Player -> SurvivalResult
 ```
 
-- 開始値は 1300。毎ターン -1。300 以下で hungry、0 以下で weak、
-  -200 以下で starving。飢餓は毎ターン 1 ダメージ。
+- 開始値は 1300。毎ターン -1。300 以下で hungry、150 以下で weak、
+  0 以下で fainting。飢餓は HP を減らさず、`-850` で死亡する。
+- `Fainted 2` は実効 1 行動を失う。失神判定は `survivalTurn` が
+  `chance 20` で行い、失神中は重ねて判定しない。
 - `tickSurvival` は状態異常の残りターンを 1 減らし、毒の毎ターンダメージ、
-  飢餓ダメージ、失効メッセージ、死亡判定をまとめて返す。
+  失神の失効メッセージ、飢餓死の判定をまとめて返す。
 - 盲目の FOV は `Core.Fov.computeBlinded`（半径 1、部屋の明かりなし）を使う。
 - 加速中は偶数ターンのモンスター行動を省略する。混乱中の移動は
   `Rng.pick` で 8 方向から選び直す。
@@ -2271,7 +2275,7 @@ releaseSessionLock : IO ()
   壊れたファイル、欠損ファイル。
 - セッションロックの取得、生存 PID の拒否、解放、死んだ PID と
   壊れたファイルの再利用。
-- `verify.sh` はクリーンビルド、1037 件のテスト、PTY スモークを実行する。
+- `verify.sh` はクリーンビルド、1042 件のテスト、PTY スモークを実行する。
 
 ### 28.7 既知の制約
 
@@ -2502,7 +2506,7 @@ data Command
   「HP が増え、最大 HP を超えない」ことを検証する形に更新した。
 - `tests/SettingsTest.idr`、`tests/SubsTest.idr`、`tests/ViewTest.idr` に
   `s` キー、パレット 25 項目、ヘルプの search 表示を追加した。
-- 全体は 795 チェックから始まり、スライス 4 時点で 1003、スライス 5 で 1010、スライス 6 で 1013、スライス 7 で 1023、スライス 8 で 1027、スライス 9 で 1031、スライス 10 で 1035、スライス 11 で 1036、現在は 1037 チェック。
+- 全体は 795 チェックから始まり、スライス 4 時点で 1003、スライス 5 で 1010、スライス 6 で 1013、スライス 7 で 1023、スライス 8 で 1027、スライス 9 で 1031、スライス 10 で 1035、スライス 11 で 1036、スライス 12 で 1037、現在は 1042 チェック。
 
 ## 31. M5 スライス 2 実装ノート（2026-11-10、メッセージカタログ）
 
@@ -2795,3 +2799,23 @@ data Command
 - `M4Test` を、読み手が `Sleeping` になり「You fall asleep.」が出ること、
   モンスターが睡眠状態にならないことの 2 チェックに更新した。
 - 全体は 1036 チェックから 1037 チェックへ増えた。
+
+## 41. M5 スライス 13 実装ノート（2026-11-14、飢餓の失神）
+
+### 41.1 挙動
+
+- `StatusKind` に `Fainted` を追加した。失神中は `Sleeping` / `Paralyzed`
+  と同じくコマンドを受け付けず、ターンだけ消費する。
+- 空腹度が 0 以下のとき、失神していなければ毎ターン `chance 20` で
+  `Fainted 2` を付与する。実効 1 行動を失い、失効時に「You come to.」を出す。
+- 飢餓による毎ターン 1 HP の減少を削除した。空腹度が `starvingDeathAt`
+  (`-850`) 以下になった時点で `Starved` にする。
+- セーブの `hunger` 検証は `> -850` に緩め、飢餓中のオートセーブを
+  拒否しないようにした。
+
+### 41.2 テスト
+
+- `M3Test` に、失神の発生と頻度、失神ターンの消費、`-850` 死亡、
+  HP が減らないことのテストを追加した。
+- `PersistTest` に、負の空腹度のセーブ往復と `-850` の拒否を追加した。
+- 全体は 1037 チェックから 1042 チェックへ増えた。

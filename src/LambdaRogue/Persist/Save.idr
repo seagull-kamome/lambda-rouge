@@ -20,6 +20,7 @@ import Language.JSON
 import LambdaRogue.Core.Bitset
 import LambdaRogue.Core.Monster
 import LambdaRogue.Core.Rng
+import LambdaRogue.Core.Survival
 import LambdaRogue.Core.Types
 import LambdaRogue.Persist.Codec
 import LambdaRogue.Persist.Json
@@ -356,7 +357,7 @@ validPlayer g =
       equipped = [p.wielded, p.worn, p.leftRing, p.rightRing]
   in p.hp >= 0 && p.hp <= p.maxHp
      && p.strength >= 0 && p.strength <= p.maxStrength
-     && p.gold >= 0 && p.hunger >= 0
+     && p.gold >= 0 && p.hunger > starvingDeathAt
      && p.level >= 1 && p.exp >= 0
      && length p.inventory <= maxPack
      && length (nub p.inventory) == length p.inventory

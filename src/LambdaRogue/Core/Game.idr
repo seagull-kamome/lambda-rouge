@@ -2195,8 +2195,16 @@ survivalTurn st =
              p3 = if digestRecovery > 0
                      then { hunger := min hungerMax (p2.hunger + digestRecovery) } p2
                      else p2
+             faintRoll = if p3.hunger <= starvingAt
+                            && not (hasStatus Fainted p3)
+                            then chance 20 rng1
+                            else (False, rng1)
+             fainted = fst faintRoll
+             rng2 = snd faintRoll
+             p4 : Player
+             p4 = if fainted then addStatus Fainted 2 p3 else p3
              g2 : Game
-             g2 = { player := p3, rng := rng1, quietTurns := quiet1 } g1
+             g2 = { player := p4, rng := rng2, quietTurns := quiet1 } g1
              teleportRoll = if hasRing RingTeleportation g2
                                then chance 2 g2.rng
                                else (False, g2.rng)
@@ -2204,8 +2212,12 @@ survivalTurn st =
              rng' = snd teleportRoll
              g3 : Game
              g3 = { rng := rng' } g2
+             st2a : Step
+             st2a = { game := g3 } st1
              st2 : Step
-             st2 = { game := g3 } st1
+             st2 = if fainted
+                      then say WarningMsg FaintFromHunger st2a
+                      else st2a
          in if teleport
                then teleportPlayer
                       (say ItemMsg RingHums st2)
@@ -2262,11 +2274,14 @@ step cmd g =
       let st0 = MkStep g [] [] False
           incapacitated = hasStatus Sleeping g.player
                           || hasStatus Paralyzed g.player
+                          || hasStatus Fainted g.player
           st1 = if incapacitated
                    then consume (say WarningMsg
                           (if hasStatus Sleeping g.player
                               then YouAreAsleep
-                              else YouAreParalyzed) st0)
+                              else if hasStatus Fainted g.player
+                                      then FaintFromHunger
+                                      else YouAreParalyzed) st0)
                    else playerAction cmd st0
           changed = st1.game.depth /= g.depth
           moved = st1.game.player.pos /= g.player.pos || changed

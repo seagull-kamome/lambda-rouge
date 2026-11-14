@@ -18,6 +18,7 @@ import LambdaRogue.Core.Game
 import LambdaRogue.Core.Message
 import LambdaRogue.Core.Replay
 import LambdaRogue.Core.Rng
+import LambdaRogue.Core.Survival
 import LambdaRogue.Core.Types
 import LambdaRogue.Persist.Codec
 import LambdaRogue.Persist.Json
@@ -82,7 +83,7 @@ allStatusKinds : List StatusKind
 allStatusKinds =
   [ Confused, Blinded, Hasted, SeeInvisible, DetectMonsters, DetectFood
   , DetectMagic, Invisible, Poisoned, Held, Slowed, Paralyzed, Scared
-  , Sleeping, Hallucinating, Levitated, ConfuseNext, Mimicking
+  , Sleeping, Hallucinating, Levitated, ConfuseNext, Mimicking, Fainted
   ]
 
 allMonsterStates : List MonsterState
@@ -394,6 +395,14 @@ run = do
        Just saved => saved.kind == Autosave
                      && gameDigest saved.game == g0Digest
        Nothing => False)
+  let gStarving : Game
+      gStarving = { player := ({ hunger := -1 } g0.player) } g0
+      gFatal : Game
+      gFatal = { player := ({ hunger := starvingDeathAt } g0.player) } g0
+  check "a starving save round-trips"
+    (isJust (saveFromJSON (saveToJSON Manual stamp gStarving)))
+  check "a save at the starvation limit is rejected"
+    (isNothing (saveFromJSON (saveToJSON Manual stamp gFatal)))
   let wrongSaveSchema : JSON
       wrongSaveSchema =
         JObject [ ("schema", JString "lambda-rogue.save.v2")

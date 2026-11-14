@@ -227,12 +227,35 @@ foodTests = do
   let rFaint = tickSurvival ({ hunger := starvingAt + 1 } base.player)
   check "starvation starts with a faint warning"
     (any (\m => msgKey m == "faint-from-hunger") rFaint.messages)
-  check "starvation damages the player"
-    (rFaint.player.hp == base.player.hp - 1)
+  check "starvation itself does not drain hit points"
+    (rFaint.player.hp == base.player.hp)
 
-  let rStarve = tickSurvival ({ hunger := starvingAt, hp := 1 } base.player)
-  check "starvation can kill the player" (rStarve.died == Just Starved)
-  check "starvation leaves HP at zero" (rStarve.player.hp == 0)
+  let rStarve = tickSurvival ({ hunger := starvingDeathAt + 1, hp := 5 }
+                                base.player)
+  check "reaching the starvation limit kills the player"
+    (rStarve.died == Just Starved)
+  check "the starvation limit is -850"
+    (starvingDeathAt == -850)
+
+  let gStarving = setPlayerStats (\p => { hunger := -1 } p) base
+      faintTurns : Nat -> Game -> Nat
+      faintTurns Z _ = 0
+      faintTurns (S k) g =
+        let out = step Wait g
+        in (if hasStatus Fainted out.game.player then 1 else 0)
+           + faintTurns k out.game
+      faintCount = faintTurns 120 gStarving
+  check "a starving player faints at unpredictable intervals"
+    (faintCount > 0 && faintCount < 120)
+
+  let gFainted = setPlayerStats
+                   (\p => { statuses := [MkStatus Fainted 2] } p) base
+      outFainted = step Wait gFainted
+  check "a fainted player loses the turn"
+    (outFainted.turnConsumed
+     && outFainted.game.turn == gFainted.turn + 1)
+  check "a lost faint turn says so"
+    (hasMessage "You faint from lack of food." outFainted)
 
   let poisonedPlayer = { statuses := [MkStatus Poisoned 2], hp := 10 }
                          base.player
